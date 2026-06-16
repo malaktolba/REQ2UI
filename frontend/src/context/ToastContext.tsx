@@ -45,10 +45,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               "flex items-start gap-3 px-4 py-3 rounded-xl shadow-xl border text-sm max-w-sm w-full pointer-events-auto",
               "animate-[slideIn_0.2s_ease-out]",
               t.type === "success"
-                ? "bg-green-950 border-green-700/50 text-green-300"
+                ? "bg-green-950 light:bg-green-50 border-green-700/50 light:border-green-200 text-green-300 light:text-green-700"
                 : t.type === "error"
-                ? "bg-red-950 border-red-700/50 text-red-300"
-                : "bg-slate-800 border-slate-700 text-slate-200",
+                ? "bg-red-950 light:bg-red-50 border-red-700/50 light:border-red-200 text-red-300 light:text-red-600"
+                : "bg-slate-800 light:bg-white border-slate-700 light:border-slate-200 text-slate-200 light:text-slate-700",
             ].join(" ")}
           >
             <span className="flex-shrink-0 mt-0.5">

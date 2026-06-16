@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant light (&:where(.light, .light *));
+
 *, *::before, *::after {
   box-sizing: border-box;
 }

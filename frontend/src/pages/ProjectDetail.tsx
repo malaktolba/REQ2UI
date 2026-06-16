@@ -5,6 +5,7 @@ import type { Project, PipelineStage } from "../types/project";
 import { StatusBadge } from "../components/StatusBadge";
 import { useToast } from "../context/ToastContext";
 import { CheckIcon, XIcon, SpinnerIcon, CircleIcon, ArrowLeft, ArrowRight } from "../components/Icons";
+import { ThemeToggle } from "../components/ThemeToggle";
 
 const STAGE_NAMES = [
   "Requirement Extraction",
@@ -27,12 +28,12 @@ function StageIcon({ status }: { status: string }) {
 
 function StageRow({ stage, name, status }: { stage: number; name: string; status: string }) {
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-slate-800 last:border-0">
+    <div className="flex items-center gap-3 py-2.5 border-b border-slate-800 light:border-slate-200 last:border-0">
       <span className="w-5 flex justify-center flex-shrink-0">
         <StageIcon status={status} />
       </span>
       <span className="text-xs text-slate-500 w-5">{stage}</span>
-      <span className={`text-sm ${status === "completed" ? "text-slate-300" : status === "running" ? "text-yellow-300" : "text-slate-500"}`}>
+      <span className={`text-sm ${status === "completed" ? "text-slate-300 light:text-slate-700" : status === "running" ? "text-yellow-300 light:text-yellow-600" : "text-slate-500"}`}>
         {name}
       </span>
     </div>
@@ -74,7 +75,8 @@ export default function ProjectDetail() {
 
     try {
       const token = sessionStorage.getItem("access_token");
-      const es = new EventSource(`/api/projects/${id}/generate?token=${token}`);
+      const base = import.meta.env.VITE_API_BASE_URL ?? "";
+      const es = new EventSource(`${base}/api/projects/${id}/generate?token=${token}`);
 
       es.addEventListener("stage", (e) => {
         const data = JSON.parse(e.data) as PipelineStage;
@@ -125,19 +127,22 @@ export default function ProjectDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+    <div className="min-h-screen bg-slate-950 light:bg-white text-white light:text-slate-900 flex flex-col transition-colors">
+      <header className="border-b border-slate-800 light:border-slate-200 bg-slate-900/60 light:bg-white/90 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-4">
-          <Link to="/" className="text-xl font-bold text-white tracking-tight">
-            Req<span className="text-indigo-400">2</span>UI
+          <Link to="/" className="text-xl font-bold text-white light:text-slate-900 tracking-tight">
+            Req<span className="text-indigo-400 light:text-indigo-600">2</span>UI
           </Link>
-          <span className="text-slate-700 text-lg font-light">/</span>
-          <Link to="/dashboard" className="text-slate-400 hover:text-white transition text-sm flex items-center gap-1">
+          <span className="text-slate-700 light:text-slate-300 text-lg font-light">/</span>
+          <Link to="/dashboard" className="text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900 transition text-sm flex items-center gap-1">
             <ArrowLeft size={14} /> Dashboard
           </Link>
-          <span className="text-slate-700 text-lg font-light">/</span>
-          <span className="text-slate-300 text-sm font-medium truncate max-w-xs">{project.name}</span>
-          <div className="ml-auto"><StatusBadge status={project.status} /></div>
+          <span className="text-slate-700 light:text-slate-300 text-lg font-light">/</span>
+          <span className="text-slate-300 light:text-slate-700 text-sm font-medium truncate max-w-xs">{project.name}</span>
+          <div className="ml-auto flex items-center gap-3">
+            <ThemeToggle />
+            <StatusBadge status={project.status} />
+          </div>
         </div>
       </header>
 
@@ -150,11 +155,11 @@ export default function ProjectDetail() {
                 {project.name}
               </span>
             </h1>
-            <p className="text-slate-400 text-sm leading-relaxed">{project.description}</p>
+            <p className="text-slate-400 light:text-slate-600 text-sm leading-relaxed">{project.description}</p>
           </div>
 
           {genError && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl">
+            <div className="bg-red-500/10 light:bg-red-50 border border-red-500/30 light:border-red-200 text-red-400 light:text-red-600 text-sm px-4 py-3 rounded-xl">
               {genError}
             </div>
           )}
@@ -163,7 +168,7 @@ export default function ProjectDetail() {
             <button
               onClick={handleGenerate}
               disabled={generating || project.status === "generating"}
-              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-5 py-2.5 rounded-xl transition text-sm shadow-lg shadow-indigo-900/40"
+              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-5 py-2.5 rounded-xl transition text-sm shadow-lg shadow-indigo-900/40 light:shadow-indigo-100"
             >
               {generating ? "Generating…" : project.status === "completed" ? "Re-generate" : "Generate artifacts"}
             </button>
@@ -171,7 +176,7 @@ export default function ProjectDetail() {
             {project.status === "completed" && (
               <button
                 onClick={() => navigate(`/projects/${id}/artifacts`)}
-                className="border border-slate-700 hover:border-indigo-500/60 text-slate-300 hover:text-white font-medium px-5 py-2.5 rounded-xl transition text-sm flex items-center gap-1.5"
+                className="border border-slate-700 light:border-slate-300 hover:border-indigo-500/60 light:hover:border-indigo-400 text-slate-300 light:text-slate-600 hover:text-white light:hover:text-slate-900 font-medium px-5 py-2.5 rounded-xl transition text-sm flex items-center gap-1.5"
               >
                 View artifacts <ArrowRight size={14} />
               </button>
@@ -180,17 +185,17 @@ export default function ProjectDetail() {
         </div>
 
         {/* Pipeline stages */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+        <div className="bg-slate-900 light:bg-slate-50 border border-slate-800 light:border-slate-200 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Pipeline</h2>
             {stages.length > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-full font-medium">
+              <span className="inline-flex items-center gap-1 text-xs bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 light:text-indigo-600 px-2 py-0.5 rounded-full font-medium">
                 {stages.filter(s => s.status === "completed").length}/{stages.length}
               </span>
             )}
           </div>
           {stages.length > 0 && (
-            <div className="h-1 bg-slate-800 rounded-full mb-4 overflow-hidden">
+            <div className="h-1 bg-slate-800 light:bg-slate-200 rounded-full mb-4 overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
                 style={{ width: `${(stages.filter(s => s.status === "completed").length / stages.length) * 100}%` }}
@@ -198,7 +203,7 @@ export default function ProjectDetail() {
             </div>
           )}
           {stages.length === 0 ? (
-            <p className="text-slate-600 text-sm">Run generation to see progress here.</p>
+            <p className="text-slate-600 light:text-slate-400 text-sm">Run generation to see progress here.</p>
           ) : (
             stages.map((s) => (
               <StageRow key={s.stage} stage={s.stage} name={s.name} status={s.status} />
@@ -207,7 +212,7 @@ export default function ProjectDetail() {
         </div>
       </main>
 
-      <footer className="border-t border-slate-800 py-6 text-center text-slate-700 text-xs">
+      <footer className="border-t border-slate-800 light:border-slate-200 py-6 text-center text-slate-700 light:text-slate-400 text-xs">
         Req2UI · AASTMT Graduation Project · {new Date().getFullYear()}
       </footer>
     </div>

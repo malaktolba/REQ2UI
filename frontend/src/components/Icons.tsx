@@ -19,6 +19,8 @@ const svg = (path: string, viewBox = "0 0 24 24") =>
     </svg>
   );
 
+export const SunIcon      = svg("M12 1v2||M12 21v2||M4.22 4.22l1.42 1.42||M18.36 18.36l1.42 1.42||M1 12h2||M21 12h2||M4.22 19.78l1.42-1.42||M18.36 5.64l1.42-1.42||M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z");
+export const MoonIcon     = svg("M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z");
 export const CheckIcon    = svg("M20 6L9 17l-5-5");
 export const XIcon        = svg("M18 6L6 18||M6 6l12 12");
 export const InfoIcon     = svg("M12 16v-4||M12 8h.01");

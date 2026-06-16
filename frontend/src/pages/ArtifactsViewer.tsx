@@ -4,6 +4,7 @@ import { fetchProject, fetchArtifacts } from "../api/projects";
 import type { Project, Artifact } from "../types/project";
 import api from "../api/axios";
 import { CheckIcon, ArrowRight, ChevronDown, ArrowLeft } from "../components/Icons";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { useToast } from "../context/ToastContext";
 
 // ─── Tab configuration ──────────────────────────────────────────────────────
@@ -27,11 +28,11 @@ type TabKey = typeof TABS[number]["key"];
 
 function Badge({ value }: { value: string }) {
   const color =
-    value === "Critical" ? "bg-red-500/20 text-red-400 border-red-500/30" :
-    value === "High"     ? "bg-orange-500/20 text-orange-400 border-orange-500/30" :
-    value === "Medium"   ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" :
-    value === "Low"      ? "bg-green-500/20 text-green-400 border-green-500/30" :
-                           "bg-slate-700/50 text-slate-400 border-slate-600";
+    value === "Critical" ? "bg-red-500/20 light:bg-red-50 text-red-400 light:text-red-700 border-red-500/30 light:border-red-200" :
+    value === "High"     ? "bg-orange-500/20 light:bg-orange-50 text-orange-400 light:text-orange-700 border-orange-500/30 light:border-orange-200" :
+    value === "Medium"   ? "bg-yellow-500/20 light:bg-yellow-50 text-yellow-400 light:text-yellow-700 border-yellow-500/30 light:border-yellow-200" :
+    value === "Low"      ? "bg-green-500/20 light:bg-green-50 text-green-400 light:text-green-700 border-green-500/30 light:border-green-200" :
+                           "bg-slate-700/50 light:bg-slate-100 text-slate-400 light:text-slate-600 border-slate-600 light:border-slate-300";
   return (
     <span className={`text-xs font-medium px-2 py-0.5 rounded border ${color}`}>
       {value}
@@ -45,30 +46,30 @@ function ExtractionView({ data }: { data: any }) {
   return (
     <div className="space-y-6">
       {data.system_summary && (
-        <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-5">
-          <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wide mb-2">System Summary</h3>
-          <p className="text-slate-200 text-sm leading-relaxed">{data.system_summary}</p>
+        <div className="bg-indigo-500/10 light:bg-indigo-50 border border-indigo-500/30 light:border-indigo-200 rounded-xl p-5">
+          <h3 className="text-xs font-semibold text-indigo-400 light:text-indigo-600 uppercase tracking-wide mb-2">System Summary</h3>
+          <p className="text-slate-200 light:text-slate-700 text-sm leading-relaxed">{data.system_summary}</p>
         </div>
       )}
       {data.actors?.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Actors</h3>
+          <h3 className="text-xs font-semibold text-slate-400 light:text-slate-500 uppercase tracking-wide mb-3">Actors</h3>
           <div className="flex flex-wrap gap-2">
             {data.actors.map((a: string, i: number) => (
-              <span key={i} className="bg-slate-800 border border-slate-700 text-slate-300 text-sm px-3 py-1 rounded-full">{a}</span>
+              <span key={i} className="bg-slate-800 light:bg-slate-100 border border-slate-700 light:border-slate-200 text-slate-300 light:text-slate-700 text-sm px-3 py-1 rounded-full">{a}</span>
             ))}
           </div>
         </div>
       )}
       {data.extracted?.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">
-            Extracted Requirements <span className="text-slate-600 normal-case font-normal">({data.extracted.length})</span>
+          <h3 className="text-xs font-semibold text-slate-400 light:text-slate-500 uppercase tracking-wide mb-3">
+            Extracted Requirements <span className="text-slate-600 light:text-slate-400 normal-case font-normal">({data.extracted.length})</span>
           </h3>
           <ol className="space-y-2">
             {data.extracted.map((req: string, i: number) => (
-              <li key={i} className="flex gap-3 text-sm text-slate-300">
-                <span className="text-slate-600 font-mono w-6 flex-shrink-0 pt-0.5">{i + 1}.</span>
+              <li key={i} className="flex gap-3 text-sm text-slate-300 light:text-slate-700">
+                <span className="text-slate-600 light:text-slate-400 font-mono w-6 flex-shrink-0 pt-0.5">{i + 1}.</span>
                 <span className="leading-relaxed">{req}</span>
               </li>
             ))}
@@ -83,27 +84,27 @@ function FRView({ data }: { data: any }) {
   return (
     <div className="space-y-4">
       {data.requirements?.map((r: any, idx: number) => (
-        <div key={r.id} className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div key={r.id} className="bg-slate-900 light:bg-white border border-slate-800 light:border-slate-200 rounded-xl p-5">
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="flex items-baseline gap-3 flex-wrap">
-              <span className="text-xs text-slate-600 font-mono flex-shrink-0">3.1.{idx + 1}</span>
-              <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded">{r.id}</span>
-              <h3 className="font-bold text-sm text-slate-100">— {r.title}</h3>
+              <span className="text-xs text-slate-600 light:text-slate-400 font-mono flex-shrink-0">3.1.{idx + 1}</span>
+              <span className="text-xs font-mono text-indigo-400 light:text-indigo-600 bg-indigo-500/10 light:bg-indigo-50 border border-indigo-500/20 light:border-indigo-200 px-2 py-0.5 rounded">{r.id}</span>
+              <h3 className="font-bold text-sm text-slate-100 light:text-slate-800">— {r.title}</h3>
             </div>
             <Badge value={r.priority} />
           </div>
-          <div className="grid grid-cols-[100px_1fr] text-xs border border-slate-800 rounded-lg overflow-hidden mb-4">
-            <div className="bg-slate-800/50 px-3 py-2 text-slate-500 font-medium border-b border-slate-800">Priority</div>
-            <div className="px-3 py-2 border-b border-slate-800"><Badge value={r.priority} /></div>
-            <div className="bg-slate-800/50 px-3 py-2 text-slate-500 font-medium">Description</div>
-            <div className="px-3 py-2 text-slate-300 leading-relaxed">{r.description}</div>
+          <div className="grid grid-cols-[100px_1fr] text-xs border border-slate-800 light:border-slate-200 rounded-lg overflow-hidden mb-4">
+            <div className="bg-slate-800/50 light:bg-slate-50 px-3 py-2 text-slate-500 font-medium border-b border-slate-800 light:border-slate-200">Priority</div>
+            <div className="px-3 py-2 border-b border-slate-800 light:border-slate-200"><Badge value={r.priority} /></div>
+            <div className="bg-slate-800/50 light:bg-slate-50 px-3 py-2 text-slate-500 font-medium">Description</div>
+            <div className="px-3 py-2 text-slate-300 light:text-slate-700 leading-relaxed">{r.description}</div>
           </div>
           {r.acceptance_criteria?.length > 0 && (
             <div>
               <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">Acceptance Criteria</p>
               <ul className="space-y-1.5">
                 {r.acceptance_criteria.map((c: string, i: number) => (
-                  <li key={i} className="text-sm text-slate-300 flex gap-2">
+                  <li key={i} className="text-sm text-slate-300 light:text-slate-700 flex gap-2">
                     <CheckIcon size={14} className="text-green-500 flex-shrink-0 mt-0.5" />
                     {c}
                   </li>
@@ -123,24 +124,24 @@ function NFRView({ data }: { data: any }) {
     <div className="space-y-8">
       {categories.map((cat, catIdx) => (
         <div key={cat}>
-          <div className="flex items-baseline gap-3 pb-2 border-b border-slate-800 mb-4">
-            <span className="text-xs text-slate-600 font-mono flex-shrink-0">3.2.{catIdx + 1}</span>
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-widest">{cat}</h3>
+          <div className="flex items-baseline gap-3 pb-2 border-b border-slate-800 light:border-slate-200 mb-4">
+            <span className="text-xs text-slate-600 light:text-slate-400 font-mono flex-shrink-0">3.2.{catIdx + 1}</span>
+            <h3 className="text-xs font-bold text-slate-300 light:text-slate-700 uppercase tracking-widest">{cat}</h3>
           </div>
           <div className="space-y-3 pl-6">
             {data.requirements?.filter((r: any) => r.category === cat).map((r: any) => (
-              <div key={r.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+              <div key={r.id} className="bg-slate-900 light:bg-white border border-slate-800 light:border-slate-200 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs font-mono text-violet-400 bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded">{r.id}</span>
-                  <span className="font-semibold text-sm text-slate-200">— {r.title}</span>
+                  <span className="text-xs font-mono text-violet-400 light:text-violet-600 bg-violet-500/10 light:bg-violet-50 border border-violet-500/20 light:border-violet-200 px-2 py-0.5 rounded">{r.id}</span>
+                  <span className="font-semibold text-sm text-slate-200 light:text-slate-800">— {r.title}</span>
                 </div>
-                <div className="grid grid-cols-[100px_1fr] text-xs border border-slate-800 rounded-lg overflow-hidden">
-                  <div className="bg-slate-800/50 px-3 py-2 text-slate-500 font-medium border-b border-slate-800">Description</div>
-                  <div className="px-3 py-2 text-slate-300 border-b border-slate-800 leading-relaxed">{r.description}</div>
+                <div className="grid grid-cols-[100px_1fr] text-xs border border-slate-800 light:border-slate-200 rounded-lg overflow-hidden">
+                  <div className="bg-slate-800/50 light:bg-slate-50 px-3 py-2 text-slate-500 font-medium border-b border-slate-800 light:border-slate-200">Description</div>
+                  <div className="px-3 py-2 text-slate-300 light:text-slate-700 border-b border-slate-800 light:border-slate-200 leading-relaxed">{r.description}</div>
                   {r.metric && (
                     <>
-                      <div className="bg-slate-800/50 px-3 py-2 text-slate-500 font-medium">Metric</div>
-                      <div className="px-3 py-2 text-green-300 font-mono">{r.metric}</div>
+                      <div className="bg-slate-800/50 light:bg-slate-50 px-3 py-2 text-slate-500 font-medium">Metric</div>
+                      <div className="px-3 py-2 text-green-300 light:text-green-700 font-mono">{r.metric}</div>
                     </>
                   )}
                 </div>
@@ -157,33 +158,33 @@ function SRView({ data }: { data: any }) {
   return (
     <div className="space-y-4">
       {data.requirements?.map((r: any, idx: number) => (
-        <div key={r.id} className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div key={r.id} className="bg-slate-900 light:bg-white border border-slate-800 light:border-slate-200 rounded-xl p-5">
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex items-baseline gap-3 flex-wrap">
-              <span className="text-xs text-slate-600 font-mono flex-shrink-0">3.3.{idx + 1}</span>
-              <span className="text-xs font-mono text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">{r.id}</span>
-              <span className="font-bold text-sm text-slate-100">— {r.title}</span>
+              <span className="text-xs text-slate-600 light:text-slate-400 font-mono flex-shrink-0">3.3.{idx + 1}</span>
+              <span className="text-xs font-mono text-red-400 light:text-red-600 bg-red-500/10 light:bg-red-50 border border-red-500/20 light:border-red-200 px-2 py-0.5 rounded">{r.id}</span>
+              <span className="font-bold text-sm text-slate-100 light:text-slate-800">— {r.title}</span>
             </div>
             <Badge value={r.priority} />
           </div>
           {r.owasp_category && (
             <div className="border-l-2 border-orange-500 pl-3 mb-4 py-0.5">
-              <span className="text-xs text-orange-400 font-medium">{r.owasp_category}</span>
+              <span className="text-xs text-orange-400 light:text-orange-600 font-medium">{r.owasp_category}</span>
             </div>
           )}
-          <div className="grid grid-cols-[100px_1fr] text-xs border border-slate-800 rounded-lg overflow-hidden mb-4">
-            <div className="bg-slate-800/50 px-3 py-2 text-slate-500 font-medium border-b border-slate-800">Priority</div>
-            <div className="px-3 py-2 border-b border-slate-800"><Badge value={r.priority} /></div>
-            <div className="bg-slate-800/50 px-3 py-2 text-slate-500 font-medium">Description</div>
-            <div className="px-3 py-2 text-slate-300 leading-relaxed">{r.description}</div>
+          <div className="grid grid-cols-[100px_1fr] text-xs border border-slate-800 light:border-slate-200 rounded-lg overflow-hidden mb-4">
+            <div className="bg-slate-800/50 light:bg-slate-50 px-3 py-2 text-slate-500 font-medium border-b border-slate-800 light:border-slate-200">Priority</div>
+            <div className="px-3 py-2 border-b border-slate-800 light:border-slate-200"><Badge value={r.priority} /></div>
+            <div className="bg-slate-800/50 light:bg-slate-50 px-3 py-2 text-slate-500 font-medium">Description</div>
+            <div className="px-3 py-2 text-slate-300 light:text-slate-700 leading-relaxed">{r.description}</div>
           </div>
           {r.controls?.length > 0 && (
             <div>
               <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">Security Controls</p>
               <ul className="space-y-1.5">
                 {r.controls.map((c: string, i: number) => (
-                  <li key={i} className="text-sm text-slate-300 flex gap-2">
-                    <ArrowRight size={13} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                  <li key={i} className="text-sm text-slate-300 light:text-slate-700 flex gap-2">
+                    <ArrowRight size={13} className="text-blue-400 light:text-blue-600 flex-shrink-0 mt-0.5" />
                     {c}
                   </li>
                 ))}
@@ -200,35 +201,35 @@ function FTCView({ data }: { data: any }) {
   return (
     <div className="space-y-4">
       {data.test_cases?.map((tc: any) => (
-        <div key={tc.id} className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div key={tc.id} className="bg-slate-900 light:bg-white border border-slate-800 light:border-slate-200 rounded-xl p-5">
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-mono text-teal-400 bg-teal-500/10 border border-teal-500/20 px-2 py-0.5 rounded">{tc.id}</span>
+              <span className="text-xs font-mono text-teal-400 light:text-teal-600 bg-teal-500/10 light:bg-teal-50 border border-teal-500/20 light:border-teal-200 px-2 py-0.5 rounded">{tc.id}</span>
               {tc.fr_id && <span className="text-xs text-slate-500">covers {tc.fr_id}</span>}
-              <span className="font-semibold text-sm text-slate-200">{tc.title}</span>
+              <span className="font-semibold text-sm text-slate-200 light:text-slate-800">{tc.title}</span>
             </div>
             <Badge value={tc.priority} />
           </div>
           {tc.preconditions && (
             <p className="text-xs text-slate-500 mb-3">
-              <span className="font-semibold text-slate-600">Preconditions: </span>{tc.preconditions}
+              <span className="font-semibold text-slate-600 light:text-slate-500">Preconditions: </span>{tc.preconditions}
             </p>
           )}
           <div className="mb-3">
             <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">Steps</p>
             <ol className="space-y-1">
               {tc.steps?.map((s: string, i: number) => (
-                <li key={i} className="text-sm text-slate-300 flex gap-2">
-                  <span className="text-slate-600 font-mono flex-shrink-0 w-5">{i + 1}.</span>
+                <li key={i} className="text-sm text-slate-300 light:text-slate-700 flex gap-2">
+                  <span className="text-slate-600 light:text-slate-400 font-mono flex-shrink-0 w-5">{i + 1}.</span>
                   {s}
                 </li>
               ))}
             </ol>
           </div>
           {tc.expected_result && (
-            <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3">
+            <div className="bg-green-500/5 light:bg-green-50 border border-green-500/20 light:border-green-200 rounded-lg p-3">
               <p className="text-xs text-slate-500 font-semibold mb-1">Expected Result</p>
-              <p className="text-sm text-green-300">{tc.expected_result}</p>
+              <p className="text-sm text-green-300 light:text-green-700">{tc.expected_result}</p>
             </div>
           )}
         </div>
@@ -241,36 +242,36 @@ function STCView({ data }: { data: any }) {
   return (
     <div className="space-y-4">
       {data.test_cases?.map((tc: any) => (
-        <div key={tc.id} className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div key={tc.id} className="bg-slate-900 light:bg-white border border-slate-800 light:border-slate-200 rounded-xl p-5">
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-mono text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded">{tc.id}</span>
+              <span className="text-xs font-mono text-orange-400 light:text-orange-600 bg-orange-500/10 light:bg-orange-50 border border-orange-500/20 light:border-orange-200 px-2 py-0.5 rounded">{tc.id}</span>
               {tc.sr_id && <span className="text-xs text-slate-500">covers {tc.sr_id}</span>}
               <span className="font-semibold text-sm text-slate-200">{tc.title}</span>
             </div>
             <Badge value={tc.severity} />
           </div>
           {tc.attack_vector && (
-            <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 mb-3">
+            <div className="bg-red-500/5 light:bg-red-50 border border-red-500/20 light:border-red-200 rounded-lg p-3 mb-3">
               <p className="text-xs text-slate-500 font-semibold mb-1">Attack Vector</p>
-              <p className="text-sm text-red-300">{tc.attack_vector}</p>
+              <p className="text-sm text-red-300 light:text-red-600">{tc.attack_vector}</p>
             </div>
           )}
           <div className="mb-3">
             <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">Steps</p>
             <ol className="space-y-1">
               {tc.steps?.map((s: string, i: number) => (
-                <li key={i} className="text-sm text-slate-300 flex gap-2">
-                  <span className="text-slate-600 font-mono flex-shrink-0 w-5">{i + 1}.</span>
+                <li key={i} className="text-sm text-slate-300 light:text-slate-700 flex gap-2">
+                  <span className="text-slate-600 light:text-slate-400 font-mono flex-shrink-0 w-5">{i + 1}.</span>
                   {s}
                 </li>
               ))}
             </ol>
           </div>
           {tc.expected_result && (
-            <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3">
+            <div className="bg-green-500/5 light:bg-green-50 border border-green-500/20 light:border-green-200 rounded-lg p-3">
               <p className="text-xs text-slate-500 font-semibold mb-1">Expected (Secure) Result</p>
-              <p className="text-sm text-green-300">{tc.expected_result}</p>
+              <p className="text-sm text-green-300 light:text-green-700">{tc.expected_result}</p>
             </div>
           )}
         </div>
@@ -432,11 +433,11 @@ function WireframesView({ data }: { data: any }) {
   return (
     <div className="space-y-8">
       {data.screens?.map((sc: any) => (
-        <div key={sc.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <div key={sc.id} className="bg-slate-900 light:bg-white border border-slate-800 light:border-slate-200 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-5 flex-wrap">
-            <span className="text-xs font-mono text-pink-400 bg-pink-500/10 border border-pink-500/20 px-2 py-0.5 rounded">{sc.id}</span>
-            <span className="font-bold text-slate-200">{sc.name}</span>
-            {sc.route && <span className="text-xs text-slate-500 font-mono bg-slate-800 px-2 py-0.5 rounded">{sc.route}</span>}
+            <span className="text-xs font-mono text-pink-400 light:text-pink-600 bg-pink-500/10 light:bg-pink-50 border border-pink-500/20 light:border-pink-200 px-2 py-0.5 rounded">{sc.id}</span>
+            <span className="font-bold text-slate-200 light:text-slate-800">{sc.name}</span>
+            {sc.route && <span className="text-xs text-slate-500 font-mono bg-slate-800 light:bg-slate-100 light:text-slate-600 px-2 py-0.5 rounded">{sc.route}</span>}
           </div>
 
           <div className="flex gap-8 flex-wrap">
@@ -494,8 +495,8 @@ function TraceabilityView({ data }: { data: any }) {
             { label: "Total TCs", value: data.coverage.total_tcs },
             { label: "Coverage", value: `${data.coverage.percentage}%` },
           ].map(({ label, value }) => (
-            <div key={label} className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-indigo-400">{value}</div>
+            <div key={label} className="bg-slate-900 light:bg-white border border-slate-800 light:border-slate-200 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-indigo-400 light:text-indigo-600">{value}</div>
               <div className="text-xs text-slate-500 mt-1">{label}</div>
             </div>
           ))}
@@ -504,7 +505,7 @@ function TraceabilityView({ data }: { data: any }) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-800">
+            <tr className="border-b border-slate-800 light:border-slate-200">
               <th className="text-left text-xs text-slate-500 font-semibold uppercase tracking-wide py-3 pr-4 w-24">FR ID</th>
               <th className="text-left text-xs text-slate-500 font-semibold uppercase tracking-wide py-3 pr-4">Title</th>
               <th className="text-left text-xs text-slate-500 font-semibold uppercase tracking-wide py-3 pr-4">Test Cases</th>
@@ -513,11 +514,11 @@ function TraceabilityView({ data }: { data: any }) {
           </thead>
           <tbody>
             {data.matrix?.map((row: any) => (
-              <tr key={row.fr_id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition">
+              <tr key={row.fr_id} className="border-b border-slate-800/50 light:border-slate-200 hover:bg-slate-800/30 light:hover:bg-slate-50 transition">
                 <td className="py-3 pr-4">
-                  <span className="text-xs font-mono text-indigo-400">{row.fr_id}</span>
+                  <span className="text-xs font-mono text-indigo-400 light:text-indigo-600">{row.fr_id}</span>
                 </td>
-                <td className="py-3 pr-4 text-slate-300">{row.fr_title}</td>
+                <td className="py-3 pr-4 text-slate-300 light:text-slate-700">{row.fr_title}</td>
                 <td className="py-3 pr-4">
                   <div className="flex flex-wrap gap-1">
                     {row.test_cases?.map((tc: string) => (
@@ -612,26 +613,26 @@ function DiagramsView({ data }: { data: any }) {
         const isOpen = expanded === d.id;
         const meta = DIAGRAM_TYPE_LABELS[d.type] ?? { label: d.type, color: "text-slate-400 bg-slate-800 border-slate-700" };
         return (
-          <div key={d.id} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+          <div key={d.id} className="bg-slate-900 light:bg-white border border-slate-800 light:border-slate-200 rounded-2xl overflow-hidden">
             <button
               onClick={() => setExpanded(isOpen ? null : d.id)}
-              className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-slate-800/40 transition text-left"
+              className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-slate-800/40 light:hover:bg-slate-50 transition text-left"
             >
               <div className="flex items-center gap-3 flex-wrap">
                 <span className={`text-xs font-mono px-2 py-0.5 rounded border ${meta.color}`}>{meta.label}</span>
-                <span className="font-semibold text-slate-100 text-sm">{d.title}</span>
+                <span className="font-semibold text-slate-100 light:text-slate-800 text-sm">{d.title}</span>
                 {d.description && <span className="text-xs text-slate-500 hidden sm:inline">— {d.description}</span>}
               </div>
               <ChevronDown size={14} className={`text-slate-500 flex-shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
             </button>
             {isOpen && (
-              <div className="border-t border-slate-800 p-5 bg-slate-950/40">
+              <div className="border-t border-slate-800 light:border-slate-200 p-5 bg-slate-950/40 light:bg-slate-50">
                 <MermaidDiagram code={d.mermaid} uid={d.id} />
                 <details className="mt-4">
-                  <summary className="text-xs text-slate-600 cursor-pointer hover:text-slate-400 transition select-none">
+                  <summary className="text-xs text-slate-600 light:text-slate-400 cursor-pointer hover:text-slate-400 light:hover:text-slate-600 transition select-none">
                     View source
                   </summary>
-                  <pre className="mt-2 text-xs text-slate-500 bg-slate-900 border border-slate-800 rounded-lg p-3 overflow-auto whitespace-pre">
+                  <pre className="mt-2 text-xs text-slate-500 bg-slate-900 light:bg-slate-100 border border-slate-800 light:border-slate-200 rounded-lg p-3 overflow-auto whitespace-pre">
                     {d.mermaid}
                   </pre>
                 </details>
@@ -649,9 +650,9 @@ function DiagramsView({ data }: { data: any }) {
 function SRSSection({ number, title, children }: { number: string; title: string; children: ReactNode }) {
   return (
     <div className="mb-10">
-      <div className="flex items-baseline gap-3 pb-3 border-b-2 border-slate-800 mb-6">
-        <span className="text-slate-600 font-mono text-base">{number}.</span>
-        <h2 className="text-base font-bold text-white uppercase tracking-wider">{title}</h2>
+      <div className="flex items-baseline gap-3 pb-3 border-b-2 border-slate-800 light:border-slate-200 mb-6">
+        <span className="text-slate-600 light:text-slate-400 font-mono text-base">{number}.</span>
+        <h2 className="text-base font-bold text-white light:text-slate-900 uppercase tracking-wider">{title}</h2>
       </div>
       <div className="space-y-8">{children}</div>
     </div>
@@ -662,8 +663,8 @@ function SRSSubsection({ number, title, children }: { number: string; title: str
   return (
     <div>
       <div className="flex items-baseline gap-2.5 mb-3">
-        <span className="text-slate-600 font-mono text-sm flex-shrink-0">{number}</span>
-        <h3 className="text-sm font-bold text-slate-300">{title}</h3>
+        <span className="text-slate-600 light:text-slate-400 font-mono text-sm flex-shrink-0">{number}</span>
+        <h3 className="text-sm font-bold text-slate-300 light:text-slate-700">{title}</h3>
       </div>
       <div className="pl-8">{children}</div>
     </div>
@@ -681,12 +682,12 @@ function SRSDocumentView({ data, projectName }: { data: Record<string, any>; pro
   return (
     <div className="max-w-4xl mx-auto">
       {/* Cover */}
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 mb-10 text-center">
-        <p className="text-xs text-indigo-400 uppercase tracking-widest font-semibold mb-3">Software Requirements Specification</p>
-        <h1 className="text-2xl font-bold text-white mb-2">{projectName ?? "Project"}</h1>
+      <div className="bg-slate-900 light:bg-white border border-slate-700 light:border-slate-200 rounded-2xl p-8 mb-10 text-center">
+        <p className="text-xs text-indigo-400 light:text-indigo-600 uppercase tracking-widest font-semibold mb-3">Software Requirements Specification</p>
+        <h1 className="text-2xl font-bold text-white light:text-slate-900 mb-2">{projectName ?? "Project"}</h1>
         <p className="text-slate-500 text-sm mb-1">IEEE Std 830-1998</p>
-        <p className="text-slate-600 text-xs">Generated {today}</p>
-        <div className="mt-5 flex items-center justify-center gap-6 text-xs text-slate-600">
+        <p className="text-slate-600 light:text-slate-400 text-xs">Generated {today}</p>
+        <div className="mt-5 flex items-center justify-center gap-6 text-xs text-slate-600 light:text-slate-400">
           <span>{frs.length} Functional Req.</span>
           <span>·</span>
           <span>{nfrs.length} Non-Functional Req.</span>
@@ -696,7 +697,7 @@ function SRSDocumentView({ data, projectName }: { data: Record<string, any>; pro
       </div>
 
       {/* TOC */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 mb-10">
+      <div className="bg-slate-900/50 light:bg-slate-50 border border-slate-800 light:border-slate-200 rounded-xl p-6 mb-10">
         <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Table of Contents</h2>
         <div className="space-y-1.5 font-mono text-sm">
           {[
@@ -707,8 +708,8 @@ function SRSDocumentView({ data, projectName }: { data: Record<string, any>; pro
             { n: "3.2", label: `Non-Functional Requirements (${nfrs.length})`, indent: true },
             { n: "3.3", label: `Security Requirements (${srs.length})`, indent: true },
           ].map(({ n, label, indent }) => (
-            <div key={n} className={`flex gap-3 ${indent ? "pl-6 text-slate-500" : "text-slate-400"}`}>
-              <span className="text-slate-600 w-8 flex-shrink-0">{n}</span>
+            <div key={n} className={`flex gap-3 ${indent ? "pl-6 text-slate-500" : "text-slate-500 light:text-slate-600"}`}>
+              <span className="text-slate-600 light:text-slate-400 w-8 flex-shrink-0">{n}</span>
               <span>{label}</span>
             </div>
           ))}
@@ -730,7 +731,7 @@ function SRSDocumentView({ data, projectName }: { data: Record<string, any>; pro
         <SRSSubsection number="1.3" title="Intended Users">
           <div className="flex flex-wrap gap-2">
             {(ext.actors ?? []).map((a: string) => (
-              <span key={a} className="bg-slate-800 border border-slate-700 text-slate-300 text-xs px-3 py-1 rounded-full">{a}</span>
+              <span key={a} className="bg-slate-800 light:bg-slate-100 border border-slate-700 light:border-slate-200 text-slate-300 light:text-slate-700 text-xs px-3 py-1 rounded-full">{a}</span>
             ))}
           </div>
         </SRSSubsection>
@@ -752,7 +753,7 @@ function SRSDocumentView({ data, projectName }: { data: Record<string, any>; pro
         <SRSSubsection number="2.2" title="User Characteristics">
           <div className="flex flex-wrap gap-2">
             {(ext.actors ?? []).map((a: string) => (
-              <span key={a} className="bg-slate-800 border border-slate-700 text-slate-300 text-xs px-3 py-1 rounded-full">{a}</span>
+              <span key={a} className="bg-slate-800 light:bg-slate-100 border border-slate-700 light:border-slate-200 text-slate-300 light:text-slate-700 text-xs px-3 py-1 rounded-full">{a}</span>
             ))}
           </div>
         </SRSSubsection>
@@ -949,7 +950,7 @@ function ArtifactSummary({ tabKey, content, artifactMap }: { tabKey: TabKey; con
   }
   if (!text) return null;
   return (
-    <div className="flex items-center gap-2 mb-5 text-xs text-slate-400 bg-slate-900 border border-slate-800 rounded-lg px-4 py-2.5">
+    <div className="flex items-center gap-2 mb-5 text-xs text-slate-400 light:text-slate-600 bg-slate-900 light:bg-slate-50 border border-slate-800 light:border-slate-200 rounded-lg px-4 py-2.5">
       <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0" />
       {text}
     </div>
@@ -1090,38 +1091,39 @@ export default function ArtifactsViewer() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 light:bg-white flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-slate-950 light:bg-white text-white light:text-slate-900 transition-colors">
       {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+      <header className="border-b border-slate-800 light:border-slate-200 bg-slate-900/60 light:bg-white/90 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-4">
-          <Link to="/" className="text-xl font-bold text-white tracking-tight flex-shrink-0">
-            Req<span className="text-indigo-400">2</span>UI
+          <Link to="/" className="text-xl font-bold text-white light:text-slate-900 tracking-tight flex-shrink-0">
+            Req<span className="text-indigo-400 light:text-indigo-600">2</span>UI
           </Link>
-          <span className="text-slate-700 text-lg font-light">/</span>
-          <Link to="/dashboard" className="text-slate-400 hover:text-white transition text-sm flex items-center gap-1 flex-shrink-0">
+          <span className="text-slate-700 light:text-slate-300 text-lg font-light">/</span>
+          <Link to="/dashboard" className="text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900 transition text-sm flex items-center gap-1 flex-shrink-0">
             <ArrowLeft size={14} /> Dashboard
           </Link>
-          <span className="text-slate-700 text-lg font-light">/</span>
-          <Link to={`/projects/${id}`} className="text-slate-400 hover:text-white transition text-sm truncate max-w-xs">
+          <span className="text-slate-700 light:text-slate-300 text-lg font-light">/</span>
+          <Link to={`/projects/${id}`} className="text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900 transition text-sm truncate max-w-xs">
             {project?.name}
           </Link>
-          <span className="text-slate-700">/</span>
-          <span className="text-slate-300 text-sm font-medium">Artifacts</span>
+          <span className="text-slate-700 light:text-slate-300">/</span>
+          <span className="text-slate-300 light:text-slate-700 text-sm font-medium">Artifacts</span>
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-xs text-slate-600 mr-2">{artifacts.length} / 9 artifacts</span>
+            <span className="text-xs text-slate-600 light:text-slate-400 mr-1">{artifacts.length} / 9</span>
+            <ThemeToggle />
             {(["pdf", "docx", "csv", "latex"] as const).map((fmt) => (
               <button
                 key={fmt}
                 onClick={() => handleExport(fmt)}
                 disabled={!!exporting || artifacts.length === 0}
-                className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-700 hover:border-indigo-500 text-slate-400 hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed uppercase"
+                className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-700 light:border-slate-300 hover:border-indigo-500 light:hover:border-indigo-400 text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900 transition disabled:opacity-40 disabled:cursor-not-allowed uppercase"
               >
                 {exporting === fmt ? "…" : fmt}
               </button>
@@ -1132,7 +1134,7 @@ export default function ArtifactsViewer() {
 
       <div className="max-w-6xl mx-auto px-6 py-8">
         {/* Tab bar */}
-        <div className="flex gap-1 overflow-x-auto pb-4 mb-8 scrollbar-none border-b border-slate-800">
+        <div className="flex gap-1 overflow-x-auto pb-4 mb-8 scrollbar-none border-b border-slate-800 light:border-slate-200">
           {TABS.map((tab) => {
             const available = tab.key === "srs_document" ? srsReady : availableKeys.has(tab.key);
             const active = activeTab === tab.key;
@@ -1146,8 +1148,8 @@ export default function ArtifactsViewer() {
                   active
                     ? "bg-indigo-600 text-white"
                     : available
-                    ? "text-slate-400 hover:text-white hover:bg-slate-800"
-                    : "text-slate-700 cursor-not-allowed",
+                    ? "text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900 hover:bg-slate-800 light:hover:bg-slate-100"
+                    : "text-slate-700 light:text-slate-400 cursor-not-allowed",
                 ].join(" ")}
               >
                 <span className="hidden sm:inline">
