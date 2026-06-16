@@ -3,7 +3,6 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { fetchProject } from "../api/projects";
 import type { Project, PipelineStage } from "../types/project";
 import { StatusBadge } from "../components/StatusBadge";
-import api from "../api/axios";
 import { useToast } from "../context/ToastContext";
 
 const STAGE_NAMES = [

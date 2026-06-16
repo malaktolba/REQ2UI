@@ -1,5 +1,5 @@
 import PDFDocument from "pdfkit";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { PassThrough } from "stream";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -8,98 +8,154 @@ function flattenArtifacts(artifacts: any[]): Record<string, any> {
   return Object.fromEntries(artifacts.map((a: any) => [a.type, a.content]));
 }
 
-function artifactSections(data: Record<string, any>): Array<{ title: string; lines: string[] }> {
-  const sections: Array<{ title: string; lines: string[] }> = [];
+interface IEEESection {
+  title: string;
+  level: 1 | 2 | 3;
+  lines: string[];
+}
 
-  if (data.extraction) {
-    const lines: string[] = [];
-    if (data.extraction.system_summary) lines.push(`Summary: ${data.extraction.system_summary}`);
-    if (data.extraction.actors?.length) lines.push(`Actors: ${data.extraction.actors.join(", ")}`);
-    (data.extraction.extracted ?? []).forEach((r: string, i: number) => lines.push(`${i + 1}. ${r}`));
-    sections.push({ title: "1. Requirement Extraction", lines });
+function ieeeSections(data: Record<string, any>): IEEESection[] {
+  const sections: IEEESection[] = [];
+
+  // ── 1. Introduction ───────────────────────────────────────────────────────
+  sections.push({ level: 1, title: "1. Introduction", lines: [] });
+  sections.push({
+    level: 2, title: "1.1 Purpose", lines: [
+      "This Software Requirements Specification (SRS) describes the functional and " +
+      "non-functional requirements for the system. It is prepared in accordance with " +
+      "IEEE Std 830-1998 and serves as the authoritative reference for system design, development, and testing.",
+    ],
+  });
+  if (data.extraction?.system_summary) {
+    sections.push({ level: 2, title: "1.2 Scope", lines: [data.extraction.system_summary] });
   }
+  if (data.extraction?.actors?.length) {
+    sections.push({ level: 2, title: "1.3 Intended Users", lines: [data.extraction.actors.join(", ")] });
+  }
+  sections.push({
+    level: 2, title: "1.4 Document Conventions", lines: [
+      "Requirements prefixed FR- are functional. NFR- are non-functional. " +
+      "SR- are security requirements mapped to OWASP Top 10 (2021).",
+    ],
+  });
 
-  if (data.functional_requirements?.requirements) {
-    const lines: string[] = [];
-    data.functional_requirements.requirements.forEach((r: any) => {
-      lines.push(`[${r.id}] ${r.title} (${r.priority})`);
-      lines.push(`  ${r.description}`);
-      (r.acceptance_criteria ?? []).forEach((c: string) => lines.push(`  ✓ ${c}`));
-      lines.push("");
+  // ── 2. Overall Description ────────────────────────────────────────────────
+  sections.push({ level: 1, title: "2. Overall Description", lines: [] });
+  if (data.extraction?.system_summary) {
+    sections.push({ level: 2, title: "2.1 System Overview", lines: [data.extraction.system_summary] });
+  }
+  if (data.extraction?.actors?.length) {
+    sections.push({ level: 2, title: "2.2 User Characteristics", lines: [data.extraction.actors.join(", ")] });
+  }
+  if (data.extraction?.extracted?.length) {
+    sections.push({
+      level: 2, title: "2.3 Identified System Needs",
+      lines: data.extraction.extracted.map((r: string, i: number) => `${i + 1}. ${r}`),
     });
-    sections.push({ title: "2. Functional Requirements (IEEE 830)", lines });
   }
 
-  if (data.non_functional_requirements?.requirements) {
-    const lines: string[] = [];
-    data.non_functional_requirements.requirements.forEach((r: any) => {
-      lines.push(`[${r.id}] ${r.title} — ${r.category}`);
-      lines.push(`  ${r.description}`);
-      if (r.metric) lines.push(`  Metric: ${r.metric}`);
+  // ── 3. Specific Requirements ──────────────────────────────────────────────
+  sections.push({ level: 1, title: "3. Specific Requirements", lines: [] });
+
+  // 3.1 Functional Requirements
+  if (data.functional_requirements?.requirements?.length) {
+    sections.push({ level: 2, title: "3.1 Functional Requirements (IEEE 830)", lines: [] });
+    data.functional_requirements.requirements.forEach((r: any, i: number) => {
+      const lines: string[] = [
+        `ID: ${r.id}    Priority: ${r.priority}`,
+        `Description: ${r.description}`,
+      ];
+      if (r.acceptance_criteria?.length) {
+        lines.push("Acceptance Criteria:");
+        r.acceptance_criteria.forEach((c: string) => lines.push(`  ✓ ${c}`));
+      }
       lines.push("");
+      sections.push({ level: 3, title: `3.1.${i + 1}  ${r.id} — ${r.title}`, lines });
     });
-    sections.push({ title: "3. Non-Functional Requirements", lines });
   }
 
-  if (data.security_requirements?.requirements) {
-    const lines: string[] = [];
-    data.security_requirements.requirements.forEach((r: any) => {
-      lines.push(`[${r.id}] ${r.title} (${r.priority})`);
-      lines.push(`  OWASP: ${r.owasp_category}`);
-      lines.push(`  ${r.description}`);
-      (r.controls ?? []).forEach((c: string) => lines.push(`  → ${c}`));
+  // 3.2 Non-Functional Requirements
+  if (data.non_functional_requirements?.requirements?.length) {
+    sections.push({ level: 2, title: "3.2 Non-Functional Requirements", lines: [] });
+    const cats = [...new Set(data.non_functional_requirements.requirements.map((r: any) => r.category))] as string[];
+    cats.forEach((cat, ci) => {
+      const catReqs = data.non_functional_requirements.requirements.filter((r: any) => r.category === cat);
+      const lines: string[] = [];
+      catReqs.forEach((r: any) => {
+        lines.push(`[${r.id}] ${r.title}`);
+        lines.push(`  ${r.description}`);
+        if (r.metric) lines.push(`  Metric: ${r.metric}`);
+        lines.push("");
+      });
+      sections.push({ level: 3, title: `3.2.${ci + 1}  ${cat}`, lines });
+    });
+  }
+
+  // 3.3 Security Requirements
+  if (data.security_requirements?.requirements?.length) {
+    sections.push({ level: 2, title: "3.3 Security Requirements (OWASP Top 10)", lines: [] });
+    data.security_requirements.requirements.forEach((r: any, i: number) => {
+      const lines: string[] = [
+        `Priority: ${r.priority}`,
+        `OWASP: ${r.owasp_category}`,
+        `Description: ${r.description}`,
+      ];
+      if (r.controls?.length) {
+        lines.push("Security Controls:");
+        r.controls.forEach((c: string) => lines.push(`  → ${c}`));
+      }
       lines.push("");
+      sections.push({ level: 3, title: `3.3.${i + 1}  ${r.id} — ${r.title}`, lines });
     });
-    sections.push({ title: "4. Security Requirements (OWASP Top 10)", lines });
   }
 
-  if (data.functional_test_cases?.test_cases) {
-    const lines: string[] = [];
-    data.functional_test_cases.test_cases.forEach((tc: any) => {
-      lines.push(`[${tc.id}] ${tc.title} (covers ${tc.fr_id}, ${tc.priority})`);
-      if (tc.preconditions) lines.push(`  Pre: ${tc.preconditions}`);
-      (tc.steps ?? []).forEach((s: string, i: number) => lines.push(`  ${i + 1}. ${s}`));
-      lines.push(`  Expected: ${tc.expected_result}`);
+  // ── 4. Functional Test Cases ──────────────────────────────────────────────
+  if (data.functional_test_cases?.test_cases?.length) {
+    sections.push({ level: 1, title: "4. Functional Test Cases (IEEE 829)", lines: [] });
+    data.functional_test_cases.test_cases.forEach((tc: any, i: number) => {
+      const lines: string[] = [];
+      if (tc.fr_id) lines.push(`Covers: ${tc.fr_id}    Priority: ${tc.priority}`);
+      if (tc.preconditions) lines.push(`Preconditions: ${tc.preconditions}`);
+      if (tc.steps?.length) {
+        lines.push("Steps:");
+        tc.steps.forEach((s: string, si: number) => lines.push(`  ${si + 1}. ${s}`));
+      }
+      if (tc.expected_result) lines.push(`Expected: ${tc.expected_result}`);
       lines.push("");
+      sections.push({ level: 2, title: `4.${i + 1}  ${tc.id} — ${tc.title}`, lines });
     });
-    sections.push({ title: "5. Functional Test Cases (IEEE 829)", lines });
   }
 
-  if (data.security_test_cases?.test_cases) {
-    const lines: string[] = [];
-    data.security_test_cases.test_cases.forEach((tc: any) => {
-      lines.push(`[${tc.id}] ${tc.title} (covers ${tc.sr_id}, ${tc.severity})`);
-      if (tc.attack_vector) lines.push(`  Attack: ${tc.attack_vector}`);
-      (tc.steps ?? []).forEach((s: string, i: number) => lines.push(`  ${i + 1}. ${s}`));
-      lines.push(`  Expected: ${tc.expected_result}`);
+  // ── 5. Security Test Cases ────────────────────────────────────────────────
+  if (data.security_test_cases?.test_cases?.length) {
+    sections.push({ level: 1, title: "5. Security Test Cases", lines: [] });
+    data.security_test_cases.test_cases.forEach((tc: any, i: number) => {
+      const lines: string[] = [];
+      if (tc.sr_id) lines.push(`Covers: ${tc.sr_id}    Severity: ${tc.severity}`);
+      if (tc.attack_vector) lines.push(`Attack Vector: ${tc.attack_vector}`);
+      if (tc.steps?.length) {
+        lines.push("Steps:");
+        tc.steps.forEach((s: string, si: number) => lines.push(`  ${si + 1}. ${s}`));
+      }
+      if (tc.expected_result) lines.push(`Expected: ${tc.expected_result}`);
       lines.push("");
+      sections.push({ level: 2, title: `5.${i + 1}  ${tc.id} — ${tc.title}`, lines });
     });
-    sections.push({ title: "6. Security Test Cases", lines });
   }
 
-  if (data.wireframes?.screens) {
-    const lines: string[] = [];
-    data.wireframes.screens.forEach((sc: any) => {
-      lines.push(`[${sc.id}] ${sc.name} ${sc.route ? `(${sc.route})` : ""}`);
-      lines.push(`  ${sc.description}`);
-      (sc.components ?? []).forEach((c: any) => lines.push(`  [${c.type}] ${c.label}: ${c.purpose}`));
-      (sc.navigation ?? []).forEach((n: string) => lines.push(`  ${n}`));
-      lines.push("");
-    });
-    sections.push({ title: "7. UI Wireframe Descriptions", lines });
-  }
-
+  // ── Appendix A: Traceability Matrix ───────────────────────────────────────
   if (data.traceability_matrix) {
     const cov = data.traceability_matrix.coverage;
     const lines: string[] = [];
-    if (cov) lines.push(`Coverage: ${cov.covered_frs}/${cov.total_frs} FRs, ${cov.total_tcs} TCs (${cov.percentage}%)`);
+    if (cov) lines.push(`Coverage: ${cov.covered_frs}/${cov.total_frs} FRs · ${cov.total_tcs} TCs · ${cov.percentage}%`);
     lines.push("");
     (data.traceability_matrix.matrix ?? []).forEach((row: any) => {
       lines.push(`${row.fr_id}: ${row.fr_title}`);
-      lines.push(`  Tests: ${(row.test_cases ?? []).join(", ")}`);
+      lines.push(`  Tests:    ${(row.test_cases ?? []).join(", ")}`);
       lines.push(`  Security: ${(row.security_reqs ?? []).join(", ")}`);
+      lines.push("");
     });
-    sections.push({ title: "8. Traceability Matrix", lines });
+    sections.push({ level: 1, title: "Appendix A: Traceability Matrix", lines });
   }
 
   return sections;
@@ -119,36 +175,49 @@ export function generatePDF(
     doc.on("error", reject);
 
     // Cover
-    doc.fontSize(24).font("Helvetica-Bold").text("Req2UI", { align: "center" });
-    doc.moveDown(0.5);
-    doc.fontSize(16).font("Helvetica").text(projectName, { align: "center" });
-    doc.moveDown(0.5);
-    doc.fontSize(10).fillColor("#888").text(`Generated ${new Date().toLocaleDateString()}`, { align: "center" });
-    doc.fillColor("#000");
+    doc.fontSize(22).font("Helvetica-Bold").fillColor("#0f172a").text("Software Requirements Specification", { align: "center" });
+    doc.moveDown(0.4);
+    doc.fontSize(16).font("Helvetica-Bold").fillColor("#1e293b").text(projectName, { align: "center" });
+    doc.moveDown(0.3);
+    doc.fontSize(10).font("Helvetica").fillColor("#64748b").text("IEEE Std 830-1998", { align: "center" });
+    doc.moveDown(0.2);
+    doc.fontSize(9).fillColor("#94a3b8").text(`Generated ${new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" })}`, { align: "center" });
+    doc.fillColor("#000000");
     doc.moveDown(2);
-    doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#cbd5e1").stroke();
     doc.moveDown(2);
 
-    const sections = artifactSections(flattenArtifacts(artifacts));
+    const sections = ieeeSections(flattenArtifacts(artifacts));
+    const INDENT = [0, 0, 15, 30];
 
-    sections.forEach(({ title, lines }) => {
+    sections.forEach(({ title, level, lines }) => {
       if (doc.y > 680) doc.addPage();
-      doc.fontSize(13).font("Helvetica-Bold").fillColor("#1e293b").text(title);
-      doc.moveDown(0.4);
-      doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#e2e8f0").stroke();
-      doc.strokeColor("#000");
-      doc.moveDown(0.4);
+
+      const fontSize = level === 1 ? 13 : level === 2 ? 11 : 10;
+      const indent = INDENT[level];
+
+      if (level === 1) {
+        doc.moveDown(0.6);
+        doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#e2e8f0").stroke();
+        doc.moveDown(0.4);
+      }
+
+      doc.fontSize(fontSize).font("Helvetica-Bold").fillColor(level === 1 ? "#0f172a" : level === 2 ? "#1e293b" : "#334155")
+        .text(title, { indent });
+      doc.moveDown(0.3);
 
       lines.forEach((line) => {
-        if (doc.y > 720) doc.addPage();
-        const isHeader = /^\[/.test(line) && !line.startsWith("  ");
+        if (doc.y > 730) doc.addPage();
+        const isBlank = line.trim() === "";
+        if (isBlank) { doc.moveDown(0.3); return; }
+        const isBullet = line.startsWith("  ");
         doc
-          .fontSize(isHeader ? 10 : 9)
-          .font(isHeader ? "Helvetica-Bold" : "Helvetica")
-          .fillColor(isHeader ? "#0f172a" : "#334155")
-          .text(line || " ", { continued: false });
+          .fontSize(9)
+          .font("Helvetica")
+          .fillColor("#334155")
+          .text(line, { indent: indent + (isBullet ? 15 : 0) });
       });
-      doc.moveDown(1.2);
+      doc.moveDown(level === 1 ? 0.6 : 0.4);
     });
 
     doc.end();
@@ -163,34 +232,47 @@ export async function generateDOCX(
 ): Promise<Buffer> {
   const children: any[] = [
     new Paragraph({
-      text: "Req2UI — " + projectName,
-      heading: HeadingLevel.TITLE,
+      children: [
+        new TextRun({ text: "Software Requirements Specification", bold: true, size: 36, color: "0f172a" }),
+      ],
+      alignment: "center" as any,
     }),
     new Paragraph({
-      children: [new TextRun({ text: `Generated ${new Date().toLocaleDateString()}`, color: "888888", size: 18 })],
+      children: [new TextRun({ text: projectName, bold: true, size: 28, color: "1e293b" })],
+      alignment: "center" as any,
+    }),
+    new Paragraph({
+      children: [new TextRun({ text: "IEEE Std 830-1998", size: 20, color: "64748b" })],
+      alignment: "center" as any,
+    }),
+    new Paragraph({
+      children: [new TextRun({ text: `Generated ${new Date().toLocaleDateString()}`, size: 18, color: "94a3b8" })],
+      alignment: "center" as any,
     }),
     new Paragraph({ text: "" }),
   ];
 
-  const sections = artifactSections(flattenArtifacts(artifacts));
+  const sections = ieeeSections(flattenArtifacts(artifacts));
+  const headingLevel = [
+    undefined,
+    HeadingLevel.HEADING_1,
+    HeadingLevel.HEADING_2,
+    HeadingLevel.HEADING_3,
+  ] as const;
 
-  sections.forEach(({ title, lines }) => {
-    children.push(
-      new Paragraph({ text: title, heading: HeadingLevel.HEADING_1 }),
-    );
+  sections.forEach(({ title, level, lines }) => {
+    children.push(new Paragraph({ text: title, heading: headingLevel[level] }));
+
     lines.forEach((line) => {
-      const isHeader = /^\[/.test(line) && !line.startsWith("  ");
+      if (line.trim() === "") {
+        children.push(new Paragraph({ text: "" }));
+        return;
+      }
+      const isBullet = line.startsWith("  ");
       children.push(
         new Paragraph({
-          children: [
-            new TextRun({
-              text: line || "",
-              bold: isHeader,
-              size: isHeader ? 20 : 18,
-              color: isHeader ? "0f172a" : "334155",
-            }),
-          ],
-          indent: line.startsWith("  ") ? { left: 360 } : undefined,
+          children: [new TextRun({ text: line, size: 18, color: "334155" })],
+          indent: isBullet ? { left: 720 } : undefined,
         }),
       );
     });

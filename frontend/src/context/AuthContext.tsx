@@ -1,4 +1,4 @@
-import { createContext, useCallback, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useEffect, useState, type ReactNode } from "react";
 import api from "../api/axios";
 
 interface AuthUser {

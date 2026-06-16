@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useParams, Link } from "react-router-dom";
 import { fetchProject, fetchArtifacts } from "../api/projects";
 import type { Project, Artifact } from "../types/project";
@@ -8,6 +8,7 @@ import { useToast } from "../context/ToastContext";
 // ─── Tab configuration ──────────────────────────────────────────────────────
 
 const TABS = [
+  { key: "srs_document",              label: "SRS Doc",           short: "SRS" },
   { key: "extraction",                label: "Extraction",        short: "EX"  },
   { key: "functional_requirements",   label: "Functional Req.",   short: "FR"  },
   { key: "non_functional_requirements", label: "Non-Functional",  short: "NFR" },
@@ -79,23 +80,29 @@ function ExtractionView({ data }: { data: any }) {
 function FRView({ data }: { data: any }) {
   return (
     <div className="space-y-4">
-      {data.requirements?.map((r: any) => (
+      {data.requirements?.map((r: any, idx: number) => (
         <div key={r.id} className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div className="flex items-center gap-2">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <span className="text-xs text-slate-600 font-mono flex-shrink-0">3.1.{idx + 1}</span>
               <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded">{r.id}</span>
-              <h3 className="font-semibold text-sm text-slate-200">{r.title}</h3>
+              <h3 className="font-bold text-sm text-slate-100">— {r.title}</h3>
             </div>
             <Badge value={r.priority} />
           </div>
-          <p className="text-slate-400 text-sm leading-relaxed mb-3">{r.description}</p>
+          <div className="grid grid-cols-[100px_1fr] text-xs border border-slate-800 rounded-lg overflow-hidden mb-4">
+            <div className="bg-slate-800/50 px-3 py-2 text-slate-500 font-medium border-b border-slate-800">Priority</div>
+            <div className="px-3 py-2 border-b border-slate-800"><Badge value={r.priority} /></div>
+            <div className="bg-slate-800/50 px-3 py-2 text-slate-500 font-medium">Description</div>
+            <div className="px-3 py-2 text-slate-300 leading-relaxed">{r.description}</div>
+          </div>
           {r.acceptance_criteria?.length > 0 && (
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1.5">Acceptance Criteria</p>
-              <ul className="space-y-1">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">Acceptance Criteria</p>
+              <ul className="space-y-1.5">
                 {r.acceptance_criteria.map((c: string, i: number) => (
-                  <li key={i} className="text-xs text-slate-400 flex gap-2">
-                    <span className="text-green-500 flex-shrink-0">✓</span>
+                  <li key={i} className="text-sm text-slate-300 flex gap-2">
+                    <span className="text-green-500 flex-shrink-0 mt-0.5">✓</span>
                     {c}
                   </li>
                 ))}
@@ -109,25 +116,32 @@ function FRView({ data }: { data: any }) {
 }
 
 function NFRView({ data }: { data: any }) {
-  const categories = [...new Set(data.requirements?.map((r: any) => r.category) ?? [])];
+  const categories = [...new Set(data.requirements?.map((r: any) => r.category) ?? [])] as string[];
   return (
-    <div className="space-y-6">
-      {categories.map((cat: any) => (
+    <div className="space-y-8">
+      {categories.map((cat, catIdx) => (
         <div key={cat}>
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 border-b border-slate-800 pb-2">{cat}</h3>
-          <div className="space-y-3">
+          <div className="flex items-baseline gap-3 pb-2 border-b border-slate-800 mb-4">
+            <span className="text-xs text-slate-600 font-mono flex-shrink-0">3.2.{catIdx + 1}</span>
+            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-widest">{cat}</h3>
+          </div>
+          <div className="space-y-3 pl-6">
             {data.requirements?.filter((r: any) => r.category === cat).map((r: any) => (
               <div key={r.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-3">
                   <span className="text-xs font-mono text-violet-400 bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded">{r.id}</span>
-                  <span className="font-medium text-sm text-slate-200">{r.title}</span>
+                  <span className="font-semibold text-sm text-slate-200">— {r.title}</span>
                 </div>
-                <p className="text-slate-400 text-sm mb-2">{r.description}</p>
-                {r.metric && (
-                  <p className="text-xs text-slate-500">
-                    <span className="text-slate-600 font-semibold">Metric: </span>{r.metric}
-                  </p>
-                )}
+                <div className="grid grid-cols-[100px_1fr] text-xs border border-slate-800 rounded-lg overflow-hidden">
+                  <div className="bg-slate-800/50 px-3 py-2 text-slate-500 font-medium border-b border-slate-800">Description</div>
+                  <div className="px-3 py-2 text-slate-300 border-b border-slate-800 leading-relaxed">{r.description}</div>
+                  {r.metric && (
+                    <>
+                      <div className="bg-slate-800/50 px-3 py-2 text-slate-500 font-medium">Metric</div>
+                      <div className="px-3 py-2 text-green-300 font-mono">{r.metric}</div>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -140,28 +154,34 @@ function NFRView({ data }: { data: any }) {
 function SRView({ data }: { data: any }) {
   return (
     <div className="space-y-4">
-      {data.requirements?.map((r: any) => (
+      {data.requirements?.map((r: any, idx: number) => (
         <div key={r.id} className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-          <div className="flex items-start justify-between gap-3 mb-2">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">{r.id}</span>
-                <span className="font-semibold text-sm text-slate-200">{r.title}</span>
-              </div>
-              {r.owasp_category && (
-                <span className="text-xs text-orange-400/80">{r.owasp_category}</span>
-              )}
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <span className="text-xs text-slate-600 font-mono flex-shrink-0">3.3.{idx + 1}</span>
+              <span className="text-xs font-mono text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">{r.id}</span>
+              <span className="font-bold text-sm text-slate-100">— {r.title}</span>
             </div>
             <Badge value={r.priority} />
           </div>
-          <p className="text-slate-400 text-sm leading-relaxed mb-3">{r.description}</p>
+          {r.owasp_category && (
+            <div className="border-l-2 border-orange-500 pl-3 mb-4 py-0.5">
+              <span className="text-xs text-orange-400 font-medium">{r.owasp_category}</span>
+            </div>
+          )}
+          <div className="grid grid-cols-[100px_1fr] text-xs border border-slate-800 rounded-lg overflow-hidden mb-4">
+            <div className="bg-slate-800/50 px-3 py-2 text-slate-500 font-medium border-b border-slate-800">Priority</div>
+            <div className="px-3 py-2 border-b border-slate-800"><Badge value={r.priority} /></div>
+            <div className="bg-slate-800/50 px-3 py-2 text-slate-500 font-medium">Description</div>
+            <div className="px-3 py-2 text-slate-300 leading-relaxed">{r.description}</div>
+          </div>
           {r.controls?.length > 0 && (
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1.5">Controls</p>
-              <ul className="space-y-1">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">Security Controls</p>
+              <ul className="space-y-1.5">
                 {r.controls.map((c: string, i: number) => (
-                  <li key={i} className="text-xs text-slate-400 flex gap-2">
-                    <span className="text-blue-500 flex-shrink-0">→</span>
+                  <li key={i} className="text-sm text-slate-300 flex gap-2">
+                    <span className="text-blue-400 flex-shrink-0">→</span>
                     {c}
                   </li>
                 ))}
@@ -519,9 +539,249 @@ function TraceabilityView({ data }: { data: any }) {
   );
 }
 
+// ─── IEEE 830 SRS Document View ─────────────────────────────────────────────
+
+function SRSSection({ number, title, children }: { number: string; title: string; children: ReactNode }) {
+  return (
+    <div className="mb-10">
+      <div className="flex items-baseline gap-3 pb-3 border-b-2 border-slate-800 mb-6">
+        <span className="text-slate-600 font-mono text-base">{number}.</span>
+        <h2 className="text-base font-bold text-white uppercase tracking-wider">{title}</h2>
+      </div>
+      <div className="space-y-8">{children}</div>
+    </div>
+  );
+}
+
+function SRSSubsection({ number, title, children }: { number: string; title: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="flex items-baseline gap-2.5 mb-3">
+        <span className="text-slate-600 font-mono text-sm flex-shrink-0">{number}</span>
+        <h3 className="text-sm font-bold text-slate-300">{title}</h3>
+      </div>
+      <div className="pl-8">{children}</div>
+    </div>
+  );
+}
+
+function SRSDocumentView({ data, projectName }: { data: Record<string, any>; projectName?: string }) {
+  const ext = data.extraction ?? {};
+  const frs = data.functional_requirements?.requirements ?? [];
+  const nfrs = data.non_functional_requirements?.requirements ?? [];
+  const srs = data.security_requirements?.requirements ?? [];
+  const nfrCats = [...new Set(nfrs.map((r: any) => r.category))] as string[];
+  const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      {/* Cover */}
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 mb-10 text-center">
+        <p className="text-xs text-indigo-400 uppercase tracking-widest font-semibold mb-3">Software Requirements Specification</p>
+        <h1 className="text-2xl font-bold text-white mb-2">{projectName ?? "Project"}</h1>
+        <p className="text-slate-500 text-sm mb-1">IEEE Std 830-1998</p>
+        <p className="text-slate-600 text-xs">Generated {today}</p>
+        <div className="mt-5 flex items-center justify-center gap-6 text-xs text-slate-600">
+          <span>{frs.length} Functional Req.</span>
+          <span>·</span>
+          <span>{nfrs.length} Non-Functional Req.</span>
+          <span>·</span>
+          <span>{srs.length} Security Req.</span>
+        </div>
+      </div>
+
+      {/* TOC */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 mb-10">
+        <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Table of Contents</h2>
+        <div className="space-y-1.5 font-mono text-sm">
+          {[
+            { n: "1.", label: "Introduction", indent: false },
+            { n: "2.", label: "Overall Description", indent: false },
+            { n: "3.", label: "Specific Requirements", indent: false },
+            { n: "3.1", label: `Functional Requirements (${frs.length})`, indent: true },
+            { n: "3.2", label: `Non-Functional Requirements (${nfrs.length})`, indent: true },
+            { n: "3.3", label: `Security Requirements (${srs.length})`, indent: true },
+          ].map(({ n, label, indent }) => (
+            <div key={n} className={`flex gap-3 ${indent ? "pl-6 text-slate-500" : "text-slate-400"}`}>
+              <span className="text-slate-600 w-8 flex-shrink-0">{n}</span>
+              <span>{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Section 1 */}
+      <SRSSection number="1" title="Introduction">
+        <SRSSubsection number="1.1" title="Purpose">
+          <p className="text-slate-300 text-sm leading-relaxed">
+            This Software Requirements Specification (SRS) describes the functional and non-functional requirements
+            for <strong className="text-slate-100">{projectName ?? "the system"}</strong>. It is prepared in accordance
+            with IEEE Std 830-1998 and serves as the authoritative reference for system design, development, and testing.
+          </p>
+        </SRSSubsection>
+        <SRSSubsection number="1.2" title="Scope">
+          <p className="text-slate-300 text-sm leading-relaxed">{ext.system_summary ?? "—"}</p>
+        </SRSSubsection>
+        <SRSSubsection number="1.3" title="Intended Users">
+          <div className="flex flex-wrap gap-2">
+            {(ext.actors ?? []).map((a: string) => (
+              <span key={a} className="bg-slate-800 border border-slate-700 text-slate-300 text-xs px-3 py-1 rounded-full">{a}</span>
+            ))}
+          </div>
+        </SRSSubsection>
+        <SRSSubsection number="1.4" title="Document Conventions">
+          <p className="text-slate-400 text-sm leading-relaxed">
+            Requirements prefixed <code className="text-indigo-400 font-mono text-xs">FR-</code> are functional.
+            Prefixed <code className="text-violet-400 font-mono text-xs">NFR-</code> are non-functional.
+            Prefixed <code className="text-red-400 font-mono text-xs">SR-</code> are security requirements
+            mapped to OWASP Top 10 (2021).
+          </p>
+        </SRSSubsection>
+      </SRSSection>
+
+      {/* Section 2 */}
+      <SRSSection number="2" title="Overall Description">
+        <SRSSubsection number="2.1" title="System Overview">
+          <p className="text-slate-300 text-sm leading-relaxed">{ext.system_summary ?? "—"}</p>
+        </SRSSubsection>
+        <SRSSubsection number="2.2" title="User Characteristics">
+          <div className="flex flex-wrap gap-2">
+            {(ext.actors ?? []).map((a: string) => (
+              <span key={a} className="bg-slate-800 border border-slate-700 text-slate-300 text-xs px-3 py-1 rounded-full">{a}</span>
+            ))}
+          </div>
+        </SRSSubsection>
+        <SRSSubsection number="2.3" title="Identified System Needs">
+          <ol className="space-y-2">
+            {(ext.extracted ?? []).map((req: string, i: number) => (
+              <li key={i} className="flex gap-3 text-sm text-slate-300">
+                <span className="text-slate-600 font-mono w-6 flex-shrink-0">{i + 1}.</span>
+                <span className="leading-relaxed">{req}</span>
+              </li>
+            ))}
+          </ol>
+        </SRSSubsection>
+      </SRSSection>
+
+      {/* Section 3 */}
+      <SRSSection number="3" title="Specific Requirements">
+        {/* 3.1 FR */}
+        <SRSSubsection number="3.1" title={`Functional Requirements (${frs.length})`}>
+          <div className="space-y-4 mt-1">
+            {frs.map((r: any, i: number) => (
+              <div key={r.id} className="border border-slate-800 rounded-xl overflow-hidden">
+                <div className="bg-slate-800/40 px-4 py-3 flex items-center justify-between gap-3">
+                  <div className="flex items-baseline gap-2.5 flex-wrap">
+                    <span className="text-xs text-slate-600 font-mono">3.1.{i + 1}</span>
+                    <span className="text-xs font-mono text-indigo-400">{r.id}</span>
+                    <span className="text-sm font-semibold text-slate-200">— {r.title}</span>
+                  </div>
+                  <Badge value={r.priority} />
+                </div>
+                <div className="px-4 py-3 space-y-3">
+                  <p className="text-slate-300 text-sm leading-relaxed">{r.description}</p>
+                  {r.acceptance_criteria?.length > 0 && (
+                    <div>
+                      <p className="text-xs text-slate-500 font-semibold mb-1.5 uppercase tracking-wide">Acceptance Criteria</p>
+                      <ul className="space-y-1">
+                        {r.acceptance_criteria.map((c: string, ci: number) => (
+                          <li key={ci} className="flex gap-2 text-sm text-slate-400">
+                            <span className="text-green-500 flex-shrink-0">✓</span>{c}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </SRSSubsection>
+
+        {/* 3.2 NFR */}
+        <SRSSubsection number="3.2" title={`Non-Functional Requirements (${nfrs.length})`}>
+          <div className="space-y-6 mt-1">
+            {nfrCats.map((cat, ci) => (
+              <div key={cat}>
+                <div className="flex items-baseline gap-2 mb-3">
+                  <span className="text-xs text-slate-600 font-mono">3.2.{ci + 1}</span>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{cat}</span>
+                </div>
+                <div className="space-y-3 pl-6">
+                  {nfrs.filter((r: any) => r.category === cat).map((r: any) => (
+                    <div key={r.id} className="border border-slate-800 rounded-xl overflow-hidden">
+                      <div className="bg-slate-800/40 px-4 py-2.5 flex items-center gap-2">
+                        <span className="text-xs font-mono text-violet-400">{r.id}</span>
+                        <span className="text-sm font-semibold text-slate-200">— {r.title}</span>
+                      </div>
+                      <div className="px-4 py-3 space-y-2">
+                        <p className="text-slate-300 text-sm leading-relaxed">{r.description}</p>
+                        {r.metric && (
+                          <p className="text-xs text-green-300 font-mono bg-green-900/20 border border-green-800/30 rounded px-2 py-1 inline-block">
+                            Metric: {r.metric}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </SRSSubsection>
+
+        {/* 3.3 SR */}
+        <SRSSubsection number="3.3" title={`Security Requirements — OWASP Top 10 (${srs.length})`}>
+          <div className="space-y-4 mt-1">
+            {srs.map((r: any, i: number) => (
+              <div key={r.id} className="border border-slate-800 rounded-xl overflow-hidden">
+                <div className="bg-slate-800/40 px-4 py-3 flex items-center justify-between gap-3">
+                  <div className="flex items-baseline gap-2.5 flex-wrap">
+                    <span className="text-xs text-slate-600 font-mono">3.3.{i + 1}</span>
+                    <span className="text-xs font-mono text-red-400">{r.id}</span>
+                    <span className="text-sm font-semibold text-slate-200">— {r.title}</span>
+                  </div>
+                  <Badge value={r.priority} />
+                </div>
+                {r.owasp_category && (
+                  <div className="border-l-2 border-orange-500 mx-4 mt-3 pl-3 py-0.5">
+                    <span className="text-xs text-orange-400">{r.owasp_category}</span>
+                  </div>
+                )}
+                <div className="px-4 pb-3 pt-2 space-y-3">
+                  <p className="text-slate-300 text-sm leading-relaxed">{r.description}</p>
+                  {r.controls?.length > 0 && (
+                    <div>
+                      <p className="text-xs text-slate-500 font-semibold mb-1.5 uppercase tracking-wide">Security Controls</p>
+                      <ul className="space-y-1">
+                        {r.controls.map((c: string, ci: number) => (
+                          <li key={ci} className="flex gap-2 text-sm text-slate-400">
+                            <span className="text-blue-400 flex-shrink-0">→</span>{c}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </SRSSubsection>
+      </SRSSection>
+    </div>
+  );
+}
+
 // ─── Artifact count helper ───────────────────────────────────────────────────
 
-function artifactCount(key: TabKey, content: any): number | null {
+function artifactCount(key: TabKey, content: any, artifactMap?: Record<string, any>): number | null {
+  if (key === "srs_document") {
+    if (!artifactMap) return null;
+    const total = (artifactMap.functional_requirements?.requirements?.length ?? 0)
+      + (artifactMap.non_functional_requirements?.requirements?.length ?? 0)
+      + (artifactMap.security_requirements?.requirements?.length ?? 0);
+    return total > 0 ? total : null;
+  }
   if (!content) return null;
   switch (key) {
     case "extraction":                  return content.extracted?.length ?? null;
@@ -536,39 +796,46 @@ function artifactCount(key: TabKey, content: any): number | null {
   }
 }
 
-function ArtifactSummary({ tabKey, content }: { tabKey: TabKey; content: any }) {
-  if (!content) return null;
+function ArtifactSummary({ tabKey, content, artifactMap }: { tabKey: TabKey; content: any; artifactMap: Record<string, any> }) {
   let text = "";
-  switch (tabKey) {
-    case "extraction":
-      text = `${content.extracted?.length ?? 0} requirements extracted · ${content.actors?.length ?? 0} actors`;
-      break;
-    case "functional_requirements": {
-      const high = content.requirements?.filter((r: any) => r.priority === "High").length ?? 0;
-      text = `${content.requirements?.length ?? 0} requirements · ${high} high priority`;
-      break;
-    }
-    case "non_functional_requirements": {
-      const cats = new Set(content.requirements?.map((r: any) => r.category) ?? []).size;
-      text = `${content.requirements?.length ?? 0} requirements across ${cats} categories`;
-      break;
-    }
-    case "security_requirements":
-      text = `${content.requirements?.length ?? 0} security requirements mapped to OWASP Top 10`;
-      break;
-    case "functional_test_cases":
-      text = `${content.test_cases?.length ?? 0} test cases (IEEE 829)`;
-      break;
-    case "security_test_cases":
-      text = `${content.test_cases?.length ?? 0} security test cases`;
-      break;
-    case "wireframes":
-      text = `${content.screens?.length ?? 0} screens`;
-      break;
-    case "traceability_matrix": {
-      const cov = content.coverage;
-      text = cov ? `${cov.covered_frs}/${cov.total_frs} FRs covered · ${cov.total_tcs} test cases · ${cov.percentage}% coverage` : "";
-      break;
+  if (tabKey === "srs_document") {
+    const fr = artifactMap.functional_requirements?.requirements?.length ?? 0;
+    const nfr = artifactMap.non_functional_requirements?.requirements?.length ?? 0;
+    const sr = artifactMap.security_requirements?.requirements?.length ?? 0;
+    text = `IEEE Std 830-1998 · ${fr} functional · ${nfr} non-functional · ${sr} security requirements`;
+  } else {
+    if (!content) return null;
+    switch (tabKey) {
+      case "extraction":
+        text = `${content.extracted?.length ?? 0} requirements extracted · ${content.actors?.length ?? 0} actors`;
+        break;
+      case "functional_requirements": {
+        const high = content.requirements?.filter((r: any) => r.priority === "High").length ?? 0;
+        text = `${content.requirements?.length ?? 0} requirements · ${high} high priority`;
+        break;
+      }
+      case "non_functional_requirements": {
+        const cats = new Set(content.requirements?.map((r: any) => r.category) ?? []).size;
+        text = `${content.requirements?.length ?? 0} requirements across ${cats} categories`;
+        break;
+      }
+      case "security_requirements":
+        text = `${content.requirements?.length ?? 0} security requirements mapped to OWASP Top 10`;
+        break;
+      case "functional_test_cases":
+        text = `${content.test_cases?.length ?? 0} test cases (IEEE 829)`;
+        break;
+      case "security_test_cases":
+        text = `${content.test_cases?.length ?? 0} security test cases`;
+        break;
+      case "wireframes":
+        text = `${content.screens?.length ?? 0} screens`;
+        break;
+      case "traceability_matrix": {
+        const cov = content.coverage;
+        text = cov ? `${cov.covered_frs}/${cov.total_frs} FRs covered · ${cov.total_tcs} test cases · ${cov.percentage}% coverage` : "";
+        break;
+      }
     }
   }
   if (!text) return null;
@@ -582,11 +849,24 @@ function ArtifactSummary({ tabKey, content }: { tabKey: TabKey; content: any }) 
 
 // ─── Content dispatcher ──────────────────────────────────────────────────────
 
-function ArtifactContent({ tabKey, content }: { tabKey: TabKey; content: any }) {
+function ArtifactContent({ tabKey, content, artifactMap, projectName }: {
+  tabKey: TabKey;
+  content: any;
+  artifactMap: Record<string, any>;
+  projectName?: string;
+}) {
+  if (tabKey === "srs_document") {
+    return (
+      <>
+        <ArtifactSummary tabKey={tabKey} content={content} artifactMap={artifactMap} />
+        <SRSDocumentView data={artifactMap} projectName={projectName} />
+      </>
+    );
+  }
   if (!content) return <p className="text-slate-500 text-sm">No data available.</p>;
   return (
     <>
-      <ArtifactSummary tabKey={tabKey} content={content} />
+      <ArtifactSummary tabKey={tabKey} content={content} artifactMap={artifactMap} />
       {(() => {
         switch (tabKey) {
           case "extraction":                return <ExtractionView data={content} />;
@@ -643,13 +923,19 @@ export default function ArtifactsViewer() {
     Promise.all([fetchProject(id), fetchArtifacts(id)]).then(([p, arts]) => {
       setProject(p);
       setArtifacts(arts);
-      if (arts.length > 0) setActiveTab(arts[0].type as TabKey);
+      if (arts.length > 0) {
+        const srsKeys = ["extraction","functional_requirements","non_functional_requirements","security_requirements"];
+        const hasSRS = srsKeys.every(k => arts.some(a => a.type === k));
+        setActiveTab(hasSRS ? "srs_document" : arts[0].type as TabKey);
+      }
       setLoading(false);
     });
   }, [id]);
 
   const artifactMap = Object.fromEntries(artifacts.map((a) => [a.type, a.content]));
   const availableKeys = new Set(artifacts.map((a) => a.type));
+  const srsReady = ["extraction","functional_requirements","non_functional_requirements","security_requirements"]
+    .every(k => availableKeys.has(k));
 
   if (loading) {
     return (
@@ -693,7 +979,7 @@ export default function ArtifactsViewer() {
         {/* Tab bar */}
         <div className="flex gap-1 overflow-x-auto pb-4 mb-8 scrollbar-none border-b border-slate-800">
           {TABS.map((tab) => {
-            const available = availableKeys.has(tab.key);
+            const available = tab.key === "srs_document" ? srsReady : availableKeys.has(tab.key);
             const active = activeTab === tab.key;
             return (
               <button
@@ -711,7 +997,7 @@ export default function ArtifactsViewer() {
               >
                 <span className="hidden sm:inline">
                   {tab.label}
-                  {(() => { const n = artifactCount(tab.key, artifactMap[tab.key]); return n !== null ? <span className={`ml-1 text-xs ${active ? "text-indigo-200" : "text-slate-600"}`}>({n})</span> : null; })()}
+                  {(() => { const n = artifactCount(tab.key, artifactMap[tab.key], artifactMap); return n !== null ? <span className={`ml-1 text-xs ${active ? "text-indigo-200" : "text-slate-600"}`}>({n})</span> : null; })()}
                 </span>
                 <span className="sm:hidden">{tab.short}</span>
               </button>
@@ -720,7 +1006,12 @@ export default function ArtifactsViewer() {
         </div>
 
         {/* Content */}
-        <ArtifactContent tabKey={activeTab} content={artifactMap[activeTab]} />
+        <ArtifactContent
+          tabKey={activeTab}
+          content={artifactMap[activeTab]}
+          artifactMap={artifactMap}
+          projectName={project?.name}
+        />
       </div>
     </div>
   );
