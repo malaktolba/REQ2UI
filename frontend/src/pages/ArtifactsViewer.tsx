@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { fetchProject, fetchArtifacts } from "../api/projects";
 import type { Project, Artifact } from "../types/project";
+import api from "../api/axios";
 
 // ─── Tab configuration ──────────────────────────────────────────────────────
 
@@ -381,6 +382,27 @@ export default function ArtifactsViewer() {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("extraction");
+  const [exporting, setExporting] = useState<string | null>(null);
+
+  async function handleExport(format: "pdf" | "docx" | "csv") {
+    if (!id || exporting) return;
+    setExporting(format);
+    try {
+      const res = await api.get(`/projects/${id}/export/${format}`, { responseType: "blob" });
+      const mime =
+        format === "pdf" ? "application/pdf" :
+        format === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" :
+        "text/csv";
+      const url = URL.createObjectURL(new Blob([res.data], { type: mime }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${project?.name ?? "project"}_req2ui.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(null);
+    }
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -417,7 +439,19 @@ export default function ArtifactsViewer() {
           </Link>
           <span className="text-slate-700">/</span>
           <span className="text-slate-300 text-sm font-medium">Artifacts</span>
-          <span className="ml-auto text-xs text-slate-600">{artifacts.length} / 8 artifacts</span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-xs text-slate-600 mr-2">{artifacts.length} / 8 artifacts</span>
+            {(["pdf", "docx", "csv"] as const).map((fmt) => (
+              <button
+                key={fmt}
+                onClick={() => handleExport(fmt)}
+                disabled={!!exporting || artifacts.length === 0}
+                className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-700 hover:border-indigo-500 text-slate-400 hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed uppercase"
+              >
+                {exporting === fmt ? "…" : fmt}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 

@@ -7,6 +7,7 @@ import { env } from "./config/env";
 import authRoutes from "./routes/auth.routes";
 import projectRoutes from "./routes/projects.routes";
 import generateRoutes from "./routes/generate.routes";
+import exportRoutes from "./routes/export.routes";
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.use(cookieParser());
 app.use("/api/auth", authRoutes);
 app.use("/api/projects", projectRoutes);
 app.use("/api/projects", generateRoutes);
+app.use("/api/projects", exportRoutes);
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 
