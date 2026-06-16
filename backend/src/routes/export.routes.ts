@@ -13,7 +13,28 @@ async function getArtifacts(projectId: string, userId: string) {
   return sql`SELECT type, content FROM artifacts WHERE project_id = ${projectId}` as any;
 }
 
-// GET /api/projects/:id/export/pdf
+// POST /api/projects/:id/export/pdf  (accepts { diagramSvgs? } in body)
+router.post("/:id/export/pdf", requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const userId = req.user!.sub;
+  const diagramSvgs: Record<string, string> | undefined = req.body?.diagramSvgs;
+
+  const [projectRows, artifacts] = await Promise.all([
+    sql`SELECT name FROM projects WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL` as any,
+    getArtifacts(id, userId),
+  ]);
+
+  if (!artifacts) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const name = projectRows[0]?.name ?? "Project";
+  const buf = await generatePDF(name, artifacts, diagramSvgs);
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${name.replace(/[^a-z0-9]/gi, "_")}_req2ui.pdf"`);
+  res.send(buf);
+});
+
+// GET /api/projects/:id/export/pdf (legacy — no diagram images)
 router.get("/:id/export/pdf", requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
   const userId = req.user!.sub;

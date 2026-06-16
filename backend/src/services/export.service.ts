@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { PassThrough } from "stream";
+import { Resvg } from "@resvg/resvg-js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -8,10 +9,21 @@ function flattenArtifacts(artifacts: any[]): Record<string, any> {
   return Object.fromEntries(artifacts.map((a: any) => [a.type, a.content]));
 }
 
+async function svgToPng(svg: string): Promise<Buffer> {
+  const resvg = new Resvg(svg, {
+    background: "white",
+    fitTo: { mode: "width", value: 900 },
+    font: { loadSystemFonts: true },
+  });
+  const rendered = resvg.render();
+  return Buffer.from(rendered.asPng());
+}
+
 interface IEEESection {
   title: string;
   level: 1 | 2 | 3;
   lines: string[];
+  diagramId?: string; // if set, embed PNG from diagramSvgs instead of text lines
 }
 
 function ieeeSections(data: Record<string, any>): IEEESection[] {
@@ -147,14 +159,15 @@ function ieeeSections(data: Record<string, any>): IEEESection[] {
   if (data.uml_diagrams?.diagrams?.length) {
     sections.push({ level: 1, title: "Appendix A: UML Diagrams", lines: [] });
     data.uml_diagrams.diagrams.forEach((d: any, i: number) => {
-      const lines = [
-        `Type: ${d.type}`,
-        d.description ? `Description: ${d.description}` : "",
-        "",
-        "Mermaid source:",
-        ...(d.mermaid ?? "").split("\n").map((l: string) => `  ${l}`),
-      ].filter((l) => l !== undefined);
-      sections.push({ level: 2, title: `A.${i + 1}  ${d.title}`, lines });
+      sections.push({
+        level: 2,
+        title: `A.${i + 1}  ${d.title}`,
+        lines: [
+          `Type: ${d.type}`,
+          d.description ? `Description: ${d.description}` : "",
+        ].filter(Boolean),
+        diagramId: d.id, // triggers PNG embedding when diagramSvgs is provided
+      });
     });
   }
 
@@ -178,65 +191,84 @@ function ieeeSections(data: Record<string, any>): IEEESection[] {
 
 // ─── PDF ─────────────────────────────────────────────────────────────────────
 
-export function generatePDF(
+export async function generatePDF(
   projectName: string,
-  artifacts: any[]
+  artifacts: any[],
+  diagramSvgs?: Record<string, string>
 ): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50, size: "A4" });
-    const chunks: Buffer[] = [];
+  const doc = new PDFDocument({ margin: 50, size: "A4" });
+  const chunks: Buffer[] = [];
+  const streamDone = new Promise<Buffer>((resolve, reject) => {
     doc.on("data", (c) => chunks.push(c));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
-
-    // Cover
-    doc.fontSize(22).font("Helvetica-Bold").fillColor("#0f172a").text("Software Requirements Specification", { align: "center" });
-    doc.moveDown(0.4);
-    doc.fontSize(16).font("Helvetica-Bold").fillColor("#1e293b").text(projectName, { align: "center" });
-    doc.moveDown(0.3);
-    doc.fontSize(10).font("Helvetica").fillColor("#64748b").text("IEEE Std 830-1998", { align: "center" });
-    doc.moveDown(0.2);
-    doc.fontSize(9).fillColor("#94a3b8").text(`Generated ${new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" })}`, { align: "center" });
-    doc.fillColor("#000000");
-    doc.moveDown(2);
-    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#cbd5e1").stroke();
-    doc.moveDown(2);
-
-    const sections = ieeeSections(flattenArtifacts(artifacts));
-    const INDENT = [0, 0, 15, 30];
-
-    sections.forEach(({ title, level, lines }) => {
-      if (doc.y > 680) doc.addPage();
-
-      const fontSize = level === 1 ? 13 : level === 2 ? 11 : 10;
-      const indent = INDENT[level];
-
-      if (level === 1) {
-        doc.moveDown(0.6);
-        doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#e2e8f0").stroke();
-        doc.moveDown(0.4);
-      }
-
-      doc.fontSize(fontSize).font("Helvetica-Bold").fillColor(level === 1 ? "#0f172a" : level === 2 ? "#1e293b" : "#334155")
-        .text(title, { indent });
-      doc.moveDown(0.3);
-
-      lines.forEach((line) => {
-        if (doc.y > 730) doc.addPage();
-        const isBlank = line.trim() === "";
-        if (isBlank) { doc.moveDown(0.3); return; }
-        const isBullet = line.startsWith("  ");
-        doc
-          .fontSize(9)
-          .font("Helvetica")
-          .fillColor("#334155")
-          .text(line, { indent: indent + (isBullet ? 15 : 0) });
-      });
-      doc.moveDown(level === 1 ? 0.6 : 0.4);
-    });
-
-    doc.end();
   });
+
+  // Cover
+  doc.fontSize(22).font("Helvetica-Bold").fillColor("#0f172a").text("Software Requirements Specification", { align: "center" });
+  doc.moveDown(0.4);
+  doc.fontSize(16).font("Helvetica-Bold").fillColor("#1e293b").text(projectName, { align: "center" });
+  doc.moveDown(0.3);
+  doc.fontSize(10).font("Helvetica").fillColor("#64748b").text("IEEE Std 830-1998", { align: "center" });
+  doc.moveDown(0.2);
+  doc.fontSize(9).fillColor("#94a3b8").text(`Generated ${new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" })}`, { align: "center" });
+  doc.fillColor("#000000");
+  doc.moveDown(2);
+  doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#cbd5e1").stroke();
+  doc.moveDown(2);
+
+  const sections = ieeeSections(flattenArtifacts(artifacts));
+  const INDENT = [0, 0, 15, 30];
+
+  for (const { title, level, lines, diagramId } of sections) {
+    if (doc.y > 680) doc.addPage();
+
+    const fontSize = level === 1 ? 13 : level === 2 ? 11 : 10;
+    const indent = INDENT[level];
+
+    if (level === 1) {
+      doc.moveDown(0.6);
+      doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#e2e8f0").stroke();
+      doc.moveDown(0.4);
+    }
+
+    doc.fontSize(fontSize).font("Helvetica-Bold")
+      .fillColor(level === 1 ? "#0f172a" : level === 2 ? "#1e293b" : "#334155")
+      .text(title, { indent });
+    doc.moveDown(0.3);
+
+    // Embed diagram PNG when SVG data is available
+    if (diagramId && diagramSvgs?.[diagramId]) {
+      // print description lines first (type / description)
+      for (const line of lines) {
+        if (line.trim() === "") continue;
+        doc.fontSize(9).font("Helvetica").fillColor("#64748b").text(line, { indent: indent + 5 });
+      }
+      doc.moveDown(0.4);
+      try {
+        const png = await svgToPng(diagramSvgs[diagramId]);
+        if (doc.y > 500) doc.addPage();
+        doc.image(png, { fit: [495, 340], align: "center" });
+      } catch {
+        doc.fontSize(9).font("Helvetica").fillColor("#ef4444").text("[Diagram rendering failed]", { indent });
+      }
+      doc.moveDown(1);
+      continue;
+    }
+
+    // Regular text lines
+    for (const line of lines) {
+      if (doc.y > 730) doc.addPage();
+      if (line.trim() === "") { doc.moveDown(0.3); continue; }
+      const isBullet = line.startsWith("  ");
+      doc.fontSize(9).font("Helvetica").fillColor("#334155")
+        .text(line, { indent: indent + (isBullet ? 15 : 0) });
+    }
+    doc.moveDown(level === 1 ? 0.6 : 0.4);
+  }
+
+  doc.end();
+  return streamDone;
 }
 
 // ─── DOCX ────────────────────────────────────────────────────────────────────

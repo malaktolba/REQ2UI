@@ -1002,13 +1002,19 @@ export default function ArtifactsViewer() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("extraction");
   const [exporting, setExporting] = useState<string | null>(null);
+  const [diagramSvgsForExport, setDiagramSvgsForExport] = useState<Record<string, string>>({});
   const toast = useToast();
 
   async function handleExport(format: "pdf" | "docx" | "csv") {
     if (!id || exporting) return;
     setExporting(format);
     try {
-      const res = await api.get(`/projects/${id}/export/${format}`, { responseType: "blob" });
+      let res: any;
+      if (format === "pdf") {
+        res = await api.post(`/projects/${id}/export/pdf`, { diagramSvgs: diagramSvgsForExport }, { responseType: "blob" });
+      } else {
+        res = await api.get(`/projects/${id}/export/${format}`, { responseType: "blob" });
+      }
       const mime =
         format === "pdf" ? "application/pdf" :
         format === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" :
@@ -1040,6 +1046,39 @@ export default function ArtifactsViewer() {
       setLoading(false);
     });
   }, [id]);
+
+  // Pre-render UML diagrams with neutral theme so PDF export can embed them
+  useEffect(() => {
+    const umlArtifact = artifacts.find((a) => a.type === "uml_diagrams");
+    const diagrams = (umlArtifact?.content as any)?.diagrams;
+    if (!diagrams?.length) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const mermaid = (await import("mermaid")).default;
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: "neutral",
+          fontFamily: "sans-serif",
+          flowchart: { htmlLabels: false, curve: "basis" },
+        });
+        mermaidReady = false; // reset so display re-initialises with dark theme next render
+        const svgs: Record<string, string> = {};
+        for (const d of diagrams) {
+          try {
+            const { svg } = await mermaid.render(`pdf-export-${d.id}`, d.mermaid);
+            svgs[d.id] = svg;
+          } catch {
+            // skip diagrams that fail to render
+          }
+        }
+        if (!cancelled) setDiagramSvgsForExport(svgs);
+      } catch {
+        // mermaid import failure — export will proceed without images
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [artifacts]);
 
   const artifactMap = Object.fromEntries(artifacts.map((a) => [a.type, a.content]));
   const availableKeys = new Set(artifacts.map((a) => a.type));
