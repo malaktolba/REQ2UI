@@ -1,24 +1,25 @@
 import { Link } from "react-router-dom";
 import Aurora from "../components/Aurora";
+import { BoltIcon, DocumentIcon, DiagramIcon, ExportIcon, ArrowRight } from "../components/Icons";
 
 const FEATURES = [
   {
-    icon: "⚡",
+    Icon: BoltIcon,
     title: "9-Stage AI Pipeline",
     desc: "From raw description to full IEEE 830 SRS in minutes — extraction, requirements, tests, wireframes, UML, and more.",
   },
   {
-    icon: "📄",
+    Icon: DocumentIcon,
     title: "IEEE 830 Standard Output",
     desc: "Functional, non-functional, and security requirements structured to the IEEE 830-1998 standard automatically.",
   },
   {
-    icon: "🔷",
+    Icon: DiagramIcon,
     title: "UML Diagrams",
     desc: "Auto-generated Use Case, Class, and Sequence diagrams rendered as interactive Mermaid.js visuals.",
   },
   {
-    icon: "📦",
+    Icon: ExportIcon,
     title: "4 Export Formats",
     desc: "Download your SRS as PDF (with embedded diagrams), DOCX, CSV, or LaTeX — ready to submit.",
   },
@@ -86,7 +87,7 @@ export default function Landing() {
               to="/register"
               className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-7 py-3.5 rounded-xl transition text-base shadow-lg shadow-indigo-900/40"
             >
-              Start for free →
+              Start for free <ArrowRight className="inline-block ml-1 align-middle" size={15} />
             </Link>
             <Link
               to="/login"
@@ -121,7 +122,9 @@ export default function Landing() {
               key={f.title}
               className="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition"
             >
-              <div className="text-2xl mb-3">{f.icon}</div>
+              <div className="mb-3 text-indigo-400">
+                <f.Icon size={24} />
+              </div>
               <h3 className="font-semibold text-sm mb-2">{f.title}</h3>
               <p className="text-slate-500 text-sm leading-relaxed">{f.desc}</p>
             </div>
@@ -159,7 +162,7 @@ export default function Landing() {
           to="/register"
           className="inline-block bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-8 py-4 rounded-xl transition text-base shadow-lg shadow-indigo-900/40"
         >
-          Create your first project →
+          Create your first project <ArrowRight className="inline-block ml-1 align-middle" size={15} />
         </Link>
       </section>
 

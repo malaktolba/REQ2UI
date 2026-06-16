@@ -4,6 +4,7 @@ import { fetchProject } from "../api/projects";
 import type { Project, PipelineStage } from "../types/project";
 import { StatusBadge } from "../components/StatusBadge";
 import { useToast } from "../context/ToastContext";
+import { CheckIcon, XIcon, SpinnerIcon, CircleIcon, ArrowLeft, ArrowRight } from "../components/Icons";
 
 const STAGE_NAMES = [
   "Requirement Extraction",
@@ -17,20 +18,19 @@ const STAGE_NAMES = [
   "UML Diagrams",
 ];
 
+function StageIcon({ status }: { status: string }) {
+  if (status === "completed") return <CheckIcon size={15} className="text-green-400" />;
+  if (status === "running")   return <SpinnerIcon size={15} className="text-yellow-400 animate-spin" />;
+  if (status === "failed")    return <XIcon size={15} className="text-red-400" />;
+  return <CircleIcon size={15} className="text-slate-600" />;
+}
+
 function StageRow({ stage, name, status }: { stage: number; name: string; status: string }) {
-  const icon =
-    status === "completed" ? "✓" :
-    status === "running" ? "⟳" :
-    status === "failed" ? "✕" : "○";
-
-  const color =
-    status === "completed" ? "text-green-400" :
-    status === "running" ? "text-yellow-400 animate-spin" :
-    status === "failed" ? "text-red-400" : "text-slate-600";
-
   return (
     <div className="flex items-center gap-3 py-2.5 border-b border-slate-800 last:border-0">
-      <span className={`text-base font-mono w-5 text-center ${color}`}>{icon}</span>
+      <span className="w-5 flex justify-center flex-shrink-0">
+        <StageIcon status={status} />
+      </span>
       <span className="text-xs text-slate-500 w-5">{stage}</span>
       <span className={`text-sm ${status === "completed" ? "text-slate-300" : status === "running" ? "text-yellow-300" : "text-slate-500"}`}>
         {name}
@@ -128,8 +128,8 @@ export default function ProjectDetail() {
     <div className="min-h-screen bg-slate-950 text-white">
       <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center gap-3">
-          <Link to="/dashboard" className="text-slate-400 hover:text-white transition text-sm">
-            ← Dashboard
+          <Link to="/dashboard" className="text-slate-400 hover:text-white transition text-sm flex items-center gap-1">
+            <ArrowLeft size={14} /> Dashboard
           </Link>
           <span className="text-slate-700">/</span>
           <span className="text-slate-300 text-sm font-medium truncate max-w-xs">{project.name}</span>
@@ -165,7 +165,7 @@ export default function ProjectDetail() {
                 onClick={() => navigate(`/projects/${id}/artifacts`)}
                 className="border border-slate-700 hover:border-indigo-500 text-slate-300 hover:text-white font-medium px-5 py-2.5 rounded-xl transition text-sm"
               >
-                View artifacts →
+                View artifacts <ArrowRight size={14} className="inline-block ml-0.5 align-middle" />
               </button>
             )}
           </div>

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { CheckIcon, XIcon, InfoIcon } from "../components/Icons";
 
 type ToastType = "success" | "error" | "info";
 
@@ -50,8 +51,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 : "bg-slate-800 border-slate-700 text-slate-200",
             ].join(" ")}
           >
-            <span className="flex-shrink-0 mt-0.5 text-base">
-              {t.type === "success" ? "✓" : t.type === "error" ? "✕" : "ℹ"}
+            <span className="flex-shrink-0 mt-0.5">
+              {t.type === "success" ? <CheckIcon size={16} /> : t.type === "error" ? <XIcon size={16} /> : <InfoIcon size={16} />}
             </span>
             <span className="leading-snug">{t.message}</span>
           </div>

@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { fetchProject, fetchArtifacts } from "../api/projects";
 import type { Project, Artifact } from "../types/project";
 import api from "../api/axios";
+import { CheckIcon, ArrowRight, ChevronDown, ArrowLeft } from "../components/Icons";
 import { useToast } from "../context/ToastContext";
 
 // ─── Tab configuration ──────────────────────────────────────────────────────
@@ -103,7 +104,7 @@ function FRView({ data }: { data: any }) {
               <ul className="space-y-1.5">
                 {r.acceptance_criteria.map((c: string, i: number) => (
                   <li key={i} className="text-sm text-slate-300 flex gap-2">
-                    <span className="text-green-500 flex-shrink-0 mt-0.5">✓</span>
+                    <CheckIcon size={14} className="text-green-500 flex-shrink-0 mt-0.5" />
                     {c}
                   </li>
                 ))}
@@ -182,7 +183,7 @@ function SRView({ data }: { data: any }) {
               <ul className="space-y-1.5">
                 {r.controls.map((c: string, i: number) => (
                   <li key={i} className="text-sm text-slate-300 flex gap-2">
-                    <span className="text-blue-400 flex-shrink-0">→</span>
+                    <ArrowRight size={13} className="text-blue-400 flex-shrink-0 mt-0.5" />
                     {c}
                   </li>
                 ))}
@@ -467,7 +468,7 @@ function WireframesView({ data }: { data: any }) {
                   <ul className="space-y-1">
                     {sc.navigation.map((n: string, i: number) => (
                       <li key={i} className="text-xs text-indigo-400 flex gap-1.5">
-                        <span className="flex-shrink-0">→</span>
+                        <ArrowRight size={12} className="flex-shrink-0 mt-0.5" />
                         <span>{n}</span>
                       </li>
                     ))}
@@ -621,7 +622,7 @@ function DiagramsView({ data }: { data: any }) {
                 <span className="font-semibold text-slate-100 text-sm">{d.title}</span>
                 {d.description && <span className="text-xs text-slate-500 hidden sm:inline">— {d.description}</span>}
               </div>
-              <span className={`text-slate-500 text-xs flex-shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}>▼</span>
+              <ChevronDown size={14} className={`text-slate-500 flex-shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
             </button>
             {isOpen && (
               <div className="border-t border-slate-800 p-5 bg-slate-950/40">
@@ -860,7 +861,7 @@ function SRSDocumentView({ data, projectName }: { data: Record<string, any>; pro
                       <ul className="space-y-1">
                         {r.controls.map((c: string, ci: number) => (
                           <li key={ci} className="flex gap-2 text-sm text-slate-400">
-                            <span className="text-blue-400 flex-shrink-0">→</span>{c}
+                            <ArrowRight size={13} className="text-blue-400 flex-shrink-0 mt-0.5" />{c}
                           </li>
                         ))}
                       </ul>
@@ -1100,8 +1101,8 @@ export default function ArtifactsViewer() {
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-3">
-          <Link to="/dashboard" className="text-slate-400 hover:text-white transition text-sm">
-            ← Dashboard
+          <Link to="/dashboard" className="text-slate-400 hover:text-white transition text-sm flex items-center gap-1">
+            <ArrowLeft size={14} /> Dashboard
           </Link>
           <span className="text-slate-700">/</span>
           <Link to={`/projects/${id}`} className="text-slate-400 hover:text-white transition text-sm truncate max-w-xs">

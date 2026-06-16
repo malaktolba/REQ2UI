@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { createProject } from "../api/projects";
 import { useToast } from "../context/ToastContext";
+import { ArrowLeft } from "../components/Icons";
 
 const EXAMPLE_PROMPTS = [
   "A mobile app for university students to track attendance and grades with professor notifications.",
@@ -38,8 +39,8 @@ export default function CreateProject() {
     <div className="min-h-screen bg-slate-950 text-white">
       <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur">
         <div className="max-w-4xl mx-auto px-6 h-16 flex items-center gap-3">
-          <Link to="/dashboard" className="text-slate-400 hover:text-white transition text-sm">
-            ← Back
+          <Link to="/dashboard" className="text-slate-400 hover:text-white transition text-sm flex items-center gap-1">
+            <ArrowLeft size={14} /> Back
           </Link>
           <span className="text-slate-700">/</span>
           <span className="text-slate-300 text-sm font-medium">New Project</span>
