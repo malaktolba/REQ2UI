@@ -1,5 +1,5 @@
 import api from "./axios";
-import type { Project } from "../types/project";
+import type { Project, Artifact } from "../types/project";
 
 export async function fetchProjects(): Promise<Project[]> {
   const { data } = await api.get<{ projects: Project[] }>("/projects");
@@ -26,4 +26,9 @@ export async function updateProject(
 
 export async function deleteProject(id: string): Promise<void> {
   await api.delete(`/projects/${id}`);
+}
+
+export async function fetchArtifacts(id: string): Promise<Artifact[]> {
+  const { data } = await api.get<{ artifacts: Artifact[] }>(`/projects/${id}/artifacts`);
+  return data.artifacts;
 }

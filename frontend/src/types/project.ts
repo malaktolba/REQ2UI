@@ -18,3 +18,10 @@ export interface PipelineStage {
   started_at: string | null;
   finished_at: string | null;
 }
+
+export interface Artifact {
+  type: string;
+  content: any;
+  version: number;
+  updated_at: string;
+}
