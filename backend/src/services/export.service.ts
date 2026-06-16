@@ -330,6 +330,89 @@ export async function generateDOCX(
   return Packer.toBuffer(doc);
 }
 
+// ─── LaTeX ───────────────────────────────────────────────────────────────────
+
+function latexEsc(s: string): string {
+  return String(s ?? "")
+    .replace(/\\/g, "\\textbackslash{}")
+    .replace(/&/g, "\\&")
+    .replace(/%/g, "\\%")
+    .replace(/\$/g, "\\$")
+    .replace(/#/g, "\\#")
+    .replace(/_/g, "\\_")
+    .replace(/\{/g, "\\{")
+    .replace(/\}/g, "\\}")
+    .replace(/~/g, "\\textasciitilde{}")
+    .replace(/\^/g, "\\textasciicircum{}")
+    .replace(/→/g, "$\\rightarrow$")
+    .replace(/✓/g, "$\\checkmark$");
+}
+
+export function generateLaTeX(projectName: string, artifacts: any[]): string {
+  const data = flattenArtifacts(artifacts);
+  const sections = ieeeSections(data);
+  const date = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
+
+  const lines: string[] = [
+    "\\documentclass[12pt,a4paper]{article}",
+    "\\usepackage[utf8]{inputenc}",
+    "\\usepackage[T1]{fontenc}",
+    "\\usepackage{lmodern}",
+    "\\usepackage[margin=2.5cm]{geometry}",
+    "\\usepackage{hyperref}",
+    "\\usepackage{enumitem}",
+    "\\usepackage{booktabs}",
+    "\\usepackage{xcolor}",
+    "\\usepackage{titlesec}",
+    "\\usepackage{parskip}",
+    "",
+    "\\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue}",
+    "\\titleformat{\\section}{\\large\\bfseries}{}{0em}{}[\\titlerule]",
+    "\\titleformat{\\subsection}{\\normalsize\\bfseries}{}{0em}{}",
+    "\\titleformat{\\subsubsection}{\\normalsize\\itshape}{}{0em}{}",
+    "",
+    `\\title{\\textbf{Software Requirements Specification}\\\\[0.4em]\\large ${latexEsc(projectName)}}`,
+    `\\author{IEEE Std 830-1998}`,
+    `\\date{${latexEsc(date)}}`,
+    "",
+    "\\begin{document}",
+    "\\maketitle",
+    "\\tableofcontents",
+    "\\newpage",
+    "",
+  ];
+
+  for (const { title, level, lines: bodyLines } of sections) {
+    const cmd = level === 1 ? "\\section*" : level === 2 ? "\\subsection*" : "\\subsubsection*";
+    lines.push(`${cmd}{${latexEsc(title)}}`);
+
+    for (const line of bodyLines) {
+      if (line.trim() === "") {
+        lines.push("");
+        continue;
+      }
+      if (line.startsWith("  →") || line.startsWith("  ✓")) {
+        // Start a bullet list for consecutive control/criteria lines
+        lines.push("\\begin{itemize}[leftmargin=1.5em]");
+        lines.push(`  \\item ${latexEsc(line.trim().replace(/^[→✓]\s*/, ""))}`);
+        // peek ahead — handled by flushing below
+        lines.push("\\end{itemize}");
+      } else if (line.match(/^\s+\d+\.\s/)) {
+        // Numbered step
+        lines.push("\\begin{enumerate}[leftmargin=1.5em]");
+        lines.push(`  \\item ${latexEsc(line.trim().replace(/^\d+\.\s*/, ""))}`);
+        lines.push("\\end{enumerate}");
+      } else {
+        lines.push(latexEsc(line));
+      }
+    }
+    lines.push("");
+  }
+
+  lines.push("\\end{document}");
+  return lines.join("\n");
+}
+
 // ─── CSV ─────────────────────────────────────────────────────────────────────
 
 export function generateCSV(artifacts: any[]): string {
