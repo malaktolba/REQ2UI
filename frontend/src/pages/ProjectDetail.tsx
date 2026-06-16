@@ -14,6 +14,7 @@ const STAGE_NAMES = [
   "Security Test Cases",
   "UI Wireframe Descriptions",
   "Traceability Matrix",
+  "UML Diagrams",
 ];
 
 function StageRow({ stage, name, status }: { stage: number; name: string; status: string }) {
@@ -84,7 +85,7 @@ export default function ProjectDetail() {
         es.close();
         setGenerating(false);
         fetchProject(id).then(setProject);
-        toast.success("All 8 artifacts generated successfully!");
+        toast.success("All 9 artifacts generated successfully!");
       });
 
       es.addEventListener("error", (e: any) => {

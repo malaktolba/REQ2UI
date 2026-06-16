@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useParams, Link } from "react-router-dom";
 import { fetchProject, fetchArtifacts } from "../api/projects";
 import type { Project, Artifact } from "../types/project";
@@ -16,6 +16,7 @@ const TABS = [
   { key: "functional_test_cases",     label: "Func. Tests",       short: "TC"  },
   { key: "security_test_cases",       label: "Security Tests",    short: "STC" },
   { key: "wireframes",                label: "Wireframes",        short: "UI"  },
+  { key: "uml_diagrams",             label: "Diagrams",          short: "UML" },
   { key: "traceability_matrix",       label: "Traceability",      short: "TM"  },
 ] as const;
 
@@ -539,6 +540,109 @@ function TraceabilityView({ data }: { data: any }) {
   );
 }
 
+// ─── UML Diagrams (Mermaid) ──────────────────────────────────────────────────
+
+let mermaidReady = false;
+
+function MermaidDiagram({ code, uid }: { code: string; uid: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function render() {
+      try {
+        const mermaid = (await import("mermaid")).default;
+        if (!mermaidReady) {
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: "dark",
+            darkMode: true,
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            flowchart: { htmlLabels: true, curve: "basis" },
+          });
+          mermaidReady = true;
+        }
+        const { svg } = await mermaid.render(`mermaid-${uid}`, code);
+        if (!cancelled && ref.current) {
+          ref.current.innerHTML = svg;
+          // remove fixed width/height so diagram scales with container
+          const svgEl = ref.current.querySelector("svg");
+          if (svgEl) {
+            svgEl.removeAttribute("width");
+            svgEl.removeAttribute("height");
+            svgEl.style.width = "100%";
+            svgEl.style.maxWidth = "100%";
+          }
+        }
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? "Failed to render diagram");
+      }
+    }
+    render();
+    return () => { cancelled = true; };
+  }, [code, uid]);
+
+  if (error) {
+    return (
+      <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 space-y-2">
+        <p className="text-xs text-red-400 font-semibold">Render error</p>
+        <pre className="text-xs text-slate-400 overflow-auto whitespace-pre-wrap">{code}</pre>
+      </div>
+    );
+  }
+  return <div ref={ref} className="flex justify-center [&_svg]:max-w-full" />;
+}
+
+const DIAGRAM_TYPE_LABELS: Record<string, { label: string; color: string }> = {
+  use_case:  { label: "Use Case",    color: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20" },
+  class:     { label: "Class",       color: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
+  sequence:  { label: "Sequence",    color: "text-teal-400 bg-teal-500/10 border-teal-500/20" },
+  er:        { label: "ER",          color: "text-orange-400 bg-orange-500/10 border-orange-500/20" },
+  activity:  { label: "Activity",    color: "text-green-400 bg-green-500/10 border-green-500/20" },
+};
+
+function DiagramsView({ data }: { data: any }) {
+  const [expanded, setExpanded] = useState<string | null>(data.diagrams?.[0]?.id ?? null);
+
+  return (
+    <div className="space-y-4">
+      {data.diagrams?.map((d: any) => {
+        const isOpen = expanded === d.id;
+        const meta = DIAGRAM_TYPE_LABELS[d.type] ?? { label: d.type, color: "text-slate-400 bg-slate-800 border-slate-700" };
+        return (
+          <div key={d.id} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+            <button
+              onClick={() => setExpanded(isOpen ? null : d.id)}
+              className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-slate-800/40 transition text-left"
+            >
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className={`text-xs font-mono px-2 py-0.5 rounded border ${meta.color}`}>{meta.label}</span>
+                <span className="font-semibold text-slate-100 text-sm">{d.title}</span>
+                {d.description && <span className="text-xs text-slate-500 hidden sm:inline">— {d.description}</span>}
+              </div>
+              <span className={`text-slate-500 text-xs flex-shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}>▼</span>
+            </button>
+            {isOpen && (
+              <div className="border-t border-slate-800 p-5 bg-slate-950/40">
+                <MermaidDiagram code={d.mermaid} uid={d.id} />
+                <details className="mt-4">
+                  <summary className="text-xs text-slate-600 cursor-pointer hover:text-slate-400 transition select-none">
+                    View source
+                  </summary>
+                  <pre className="mt-2 text-xs text-slate-500 bg-slate-900 border border-slate-800 rounded-lg p-3 overflow-auto whitespace-pre">
+                    {d.mermaid}
+                  </pre>
+                </details>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── IEEE 830 SRS Document View ─────────────────────────────────────────────
 
 function SRSSection({ number, title, children }: { number: string; title: string; children: ReactNode }) {
@@ -791,6 +895,7 @@ function artifactCount(key: TabKey, content: any, artifactMap?: Record<string, a
     case "functional_test_cases":       return content.test_cases?.length ?? null;
     case "security_test_cases":         return content.test_cases?.length ?? null;
     case "wireframes":                  return content.screens?.length ?? null;
+    case "uml_diagrams":               return content.diagrams?.length ?? null;
     case "traceability_matrix":         return content.matrix?.length ?? null;
     default:                            return null;
   }
@@ -830,6 +935,9 @@ function ArtifactSummary({ tabKey, content, artifactMap }: { tabKey: TabKey; con
         break;
       case "wireframes":
         text = `${content.screens?.length ?? 0} screens`;
+        break;
+      case "uml_diagrams":
+        text = `${content.diagrams?.length ?? 0} UML diagrams (Mermaid.js)`;
         break;
       case "traceability_matrix": {
         const cov = content.coverage;
@@ -876,6 +984,7 @@ function ArtifactContent({ tabKey, content, artifactMap, projectName }: {
           case "functional_test_cases":     return <FTCView data={content} />;
           case "security_test_cases":       return <STCView data={content} />;
           case "wireframes":                return <WireframesView data={content} />;
+          case "uml_diagrams":             return <DiagramsView data={content} />;
           case "traceability_matrix":       return <TraceabilityView data={content} />;
           default:                          return <pre className="text-xs text-slate-400 overflow-auto">{JSON.stringify(content, null, 2)}</pre>;
         }
@@ -960,7 +1069,7 @@ export default function ArtifactsViewer() {
           <span className="text-slate-700">/</span>
           <span className="text-slate-300 text-sm font-medium">Artifacts</span>
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-xs text-slate-600 mr-2">{artifacts.length} / 8 artifacts</span>
+            <span className="text-xs text-slate-600 mr-2">{artifacts.length} / 9 artifacts</span>
             {(["pdf", "docx", "csv"] as const).map((fmt) => (
               <button
                 key={fmt}

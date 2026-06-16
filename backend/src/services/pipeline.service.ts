@@ -19,6 +19,7 @@ const STAGE_NAMES = [
   "Security Test Cases",
   "UI Wireframe Descriptions",
   "Traceability Matrix",
+  "UML Diagrams",
 ];
 
 async function upsertStage(
@@ -283,6 +284,54 @@ ${s2.requirements?.map((r: any) => `${r.id}: ${r.title}`).join("\n")}
 Functional test cases available: ${s5.test_cases?.map((t: any) => t.id).join(", ")}
 
 Security requirements available: ${s4.requirements?.map((r: any) => r.id).join(", ")}`,
+      emit
+    );
+
+    // ── Stage 9: UML Diagrams (Mermaid.js) ──────────────────────────────────
+    await runStage<any>(
+      projectId, 9, "uml_diagrams",
+      `You are a software architect. Generate exactly 3 UML diagrams as valid Mermaid.js code.
+
+Return a JSON object with this exact shape:
+{
+  "diagrams": [
+    {
+      "id": "UML-001",
+      "title": "System Use Case Diagram",
+      "type": "use_case",
+      "description": "one-line description",
+      "mermaid": "flowchart TD\\n  ActorName((Actor Label))\\n  UC1[Use Case One]\\n  ActorName --> UC1"
+    },
+    {
+      "id": "UML-002",
+      "title": "Domain Class Diagram",
+      "type": "class",
+      "description": "one-line description",
+      "mermaid": "classDiagram\\n  class EntityName {\\n    +id String\\n    +field String\\n    +method()\\n  }\\n  EntityA --> EntityB : relation"
+    },
+    {
+      "id": "UML-003",
+      "title": "Main Sequence Diagram",
+      "type": "sequence",
+      "description": "one-line description",
+      "mermaid": "sequenceDiagram\\n  actor User\\n  participant System\\n  participant DB\\n  User->>System: action\\n  System->>DB: query\\n  DB-->>System: result\\n  System-->>User: response"
+    }
+  ]
+}
+
+STRICT Mermaid syntax rules:
+1. flowchart TD for use case: actors as ((Label)), use cases as [Label], arrows as -->
+2. classDiagram: attributes as "+name Type", methods as "+method()", relations as "ClassA --> ClassB : label"
+3. sequenceDiagram: use actor for humans, participant for systems; arrows ->> (solid) or -->>(dashed)
+4. Node IDs must be alphanumeric with no spaces. Labels can have spaces inside quotes or parens.
+5. Every \\n in the JSON string is a real newline in the diagram. Do NOT use actual newlines in the JSON value.
+6. Keep each diagram concise (under 20 nodes/lines) for clarity.`,
+      `Project: ${projectName}
+System summary: ${s1.system_summary}
+Actors: ${s1.actors?.join(", ")}
+Key functional requirements:
+${s2.requirements?.slice(0, 8).map((r: any) => `${r.id}: ${r.title}`).join("\n")}
+Main domain entities implied by requirements (infer from context).`,
       emit
     );
 

@@ -143,7 +143,22 @@ function ieeeSections(data: Record<string, any>): IEEESection[] {
     });
   }
 
-  // ── Appendix A: Traceability Matrix ───────────────────────────────────────
+  // ── Appendix A: UML Diagrams ─────────────────────────────────────────────
+  if (data.uml_diagrams?.diagrams?.length) {
+    sections.push({ level: 1, title: "Appendix A: UML Diagrams", lines: [] });
+    data.uml_diagrams.diagrams.forEach((d: any, i: number) => {
+      const lines = [
+        `Type: ${d.type}`,
+        d.description ? `Description: ${d.description}` : "",
+        "",
+        "Mermaid source:",
+        ...(d.mermaid ?? "").split("\n").map((l: string) => `  ${l}`),
+      ].filter((l) => l !== undefined);
+      sections.push({ level: 2, title: `A.${i + 1}  ${d.title}`, lines });
+    });
+  }
+
+  // ── Appendix B: Traceability Matrix ──────────────────────────────────────
   if (data.traceability_matrix) {
     const cov = data.traceability_matrix.coverage;
     const lines: string[] = [];
@@ -155,7 +170,7 @@ function ieeeSections(data: Record<string, any>): IEEESection[] {
       lines.push(`  Security: ${(row.security_reqs ?? []).join(", ")}`);
       lines.push("");
     });
-    sections.push({ level: 1, title: "Appendix A: Traceability Matrix", lines });
+    sections.push({ level: 1, title: "Appendix B: Traceability Matrix", lines });
   }
 
   return sections;
