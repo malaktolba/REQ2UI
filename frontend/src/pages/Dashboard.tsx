@@ -3,14 +3,15 @@ import { useNavigate, Link } from "react-router-dom";
 import { useProjects } from "../hooks/useProjects";
 import { ProjectCard } from "../components/ProjectCard";
 import { useToast } from "../context/ToastContext";
+import { ArrowRight } from "../components/Icons";
 
 function SkeletonCard() {
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 animate-pulse">
-      <div className="h-4 bg-slate-800 rounded w-3/4 mb-3" />
-      <div className="h-3 bg-slate-800 rounded mb-2" />
-      <div className="h-3 bg-slate-800 rounded w-5/6 mb-4" />
-      <div className="h-3 bg-slate-800 rounded w-1/4" />
+      <div className="h-4 bg-slate-800 rounded-lg w-3/4 mb-3" />
+      <div className="h-3 bg-slate-800 rounded-lg mb-2" />
+      <div className="h-3 bg-slate-800 rounded-lg w-5/6 mb-4" />
+      <div className="h-3 bg-slate-800 rounded-lg w-1/4" />
     </div>
   );
 }
@@ -36,10 +37,12 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
       <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <span className="text-lg font-bold text-indigo-400">Req2UI</span>
+          <Link to="/" className="text-xl font-bold text-white tracking-tight">
+            Req<span className="text-indigo-400">2</span>UI
+          </Link>
           <div className="flex items-center gap-4">
             <span className="text-sm text-slate-400 hidden sm:block">{user?.name}</span>
             <button
@@ -52,38 +55,44 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-10">
-        <div className="flex items-center justify-between mb-8">
+      <main className="max-w-6xl mx-auto px-6 py-10 flex-1 w-full">
+        {/* Page header */}
+        <div className="flex items-start justify-between mb-8 gap-4">
           <div>
-            <h2 className="text-2xl font-bold">Your Projects</h2>
-            <p className="text-slate-400 mt-1 text-sm">Requirements → Artifacts in minutes</p>
+            <p className="text-slate-500 text-sm mb-1">Welcome back, {user?.name?.split(" ")[0]}</p>
+            <h2 className="text-3xl font-bold">
+              Your{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
+                Projects
+              </span>
+            </h2>
           </div>
           <Link
             to="/projects/new"
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2.5 rounded-xl transition text-sm"
+            className="flex-shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2.5 rounded-xl transition text-sm shadow-lg shadow-indigo-900/40 flex items-center gap-2"
           >
-            + New project
+            New project <ArrowRight size={14} />
           </Link>
         </div>
 
-        {/* Stats bar */}
+        {/* Stats */}
         {!loading && projects.length > 0 && (
-          <div className="flex gap-4 mb-8 flex-wrap">
+          <div className="grid grid-cols-3 gap-3 mb-8 max-w-sm">
             {[
-              { label: "Total Projects", value: projects.length },
+              { label: "Total", value: projects.length },
               { label: "Completed", value: projects.filter(p => p.status === "completed").length },
-              { label: "Total Artifacts", value: projects.reduce((s, p) => s + (p.artifact_count ?? 0), 0) },
+              { label: "Artifacts", value: projects.reduce((s, p) => s + (p.artifact_count ?? 0), 0) },
             ].map(({ label, value }) => (
-              <div key={label} className="bg-slate-900 border border-slate-800 rounded-xl px-5 py-3 flex items-center gap-3">
-                <span className="text-2xl font-bold text-indigo-400">{value}</span>
-                <span className="text-xs text-slate-500">{label}</span>
+              <div key={label} className="bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3 text-center">
+                <div className="text-2xl font-bold text-indigo-400">{value}</div>
+                <div className="text-xs text-slate-500 mt-0.5">{label}</div>
               </div>
             ))}
           </div>
         )}
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-lg mb-6">
+          <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl mb-6">
             {error}
           </div>
         )}
@@ -93,14 +102,19 @@ export default function Dashboard() {
             {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         ) : projects.length === 0 ? (
-          <div className="border-2 border-dashed border-slate-800 rounded-2xl py-24 text-center">
-            <p className="text-slate-500 text-lg mb-1">No projects yet</p>
-            <p className="text-slate-600 text-sm mb-6">Create your first project to get started</p>
+          <div className="border border-dashed border-slate-800 rounded-2xl py-24 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="text-indigo-400" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </div>
+            <p className="text-slate-300 font-semibold mb-1">No projects yet</p>
+            <p className="text-slate-600 text-sm mb-6">Describe a system and let AI generate your full SRS</p>
             <Link
               to="/projects/new"
-              className="inline-block bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-2.5 rounded-xl transition text-sm"
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-2.5 rounded-xl transition text-sm shadow-lg shadow-indigo-900/40"
             >
-              Create project
+              Create your first project <ArrowRight size={14} />
             </Link>
           </div>
         ) : (
@@ -111,6 +125,10 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      <footer className="border-t border-slate-800 py-6 text-center text-slate-700 text-xs">
+        Req2UI · AASTMT Graduation Project · {new Date().getFullYear()}
+      </footer>
     </div>
   );
 }

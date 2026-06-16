@@ -27,7 +27,7 @@ export function ProjectCard({ project, onDelete }: Props) {
   return (
     <div
       onClick={() => navigate(`/projects/${project.id}`)}
-      className="bg-slate-900 border border-slate-800 rounded-2xl p-5 cursor-pointer hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/5 transition group"
+      className="bg-slate-900 border border-slate-800 rounded-2xl p-5 cursor-pointer hover:border-indigo-500/40 hover:shadow-xl hover:shadow-indigo-950/50 transition-all duration-200 group flex flex-col"
     >
       <div className="flex items-start justify-between gap-2 mb-3">
         <h3 className="text-white font-semibold text-base leading-snug line-clamp-2 group-hover:text-indigo-300 transition">
@@ -36,22 +36,28 @@ export function ProjectCard({ project, onDelete }: Props) {
         <StatusBadge status={project.status} />
       </div>
 
-      <p className="text-slate-400 text-sm line-clamp-3 mb-4">
+      <p className="text-slate-400 text-sm line-clamp-3 leading-relaxed flex-1 mb-4">
         {project.description}
       </p>
 
-      <div className="flex items-center justify-between text-xs text-slate-500">
-        <div className="flex flex-col gap-0.5">
-          <span>{project.artifact_count} artifact{project.artifact_count !== 1 ? "s" : ""}</span>
-          <span className="text-slate-700">{new Date(project.created_at).toLocaleDateString()}</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {(project.artifact_count ?? 0) > 0 ? (
+            <span className="inline-flex items-center gap-1 text-xs bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-full font-medium">
+              {project.artifact_count} artifact{project.artifact_count !== 1 ? "s" : ""}
+            </span>
+          ) : (
+            <span className="text-xs text-slate-600">No artifacts yet</span>
+          )}
+          <span className="text-xs text-slate-700">{new Date(project.created_at).toLocaleDateString()}</span>
         </div>
         <button
           onClick={handleDelete}
           disabled={deleting}
-          className={`px-2.5 py-1 rounded-lg border transition ${
+          className={`px-2.5 py-1 rounded-lg border text-xs transition ${
             confirmDelete
-              ? "border-red-500 text-red-400 hover:bg-red-500/10"
-              : "border-slate-700 text-slate-500 hover:border-red-500/50 hover:text-red-400"
+              ? "border-red-500/60 text-red-400 bg-red-500/10"
+              : "border-slate-700 text-slate-600 hover:border-red-500/40 hover:text-red-400"
           }`}
         >
           {deleting ? "Deleting…" : confirmDelete ? "Confirm?" : "Delete"}

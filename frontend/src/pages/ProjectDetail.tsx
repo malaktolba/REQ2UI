@@ -125,37 +125,45 @@ export default function ProjectDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur">
-        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center gap-3">
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-4">
+          <Link to="/" className="text-xl font-bold text-white tracking-tight">
+            Req<span className="text-indigo-400">2</span>UI
+          </Link>
+          <span className="text-slate-700 text-lg font-light">/</span>
           <Link to="/dashboard" className="text-slate-400 hover:text-white transition text-sm flex items-center gap-1">
             <ArrowLeft size={14} /> Dashboard
           </Link>
-          <span className="text-slate-700">/</span>
+          <span className="text-slate-700 text-lg font-light">/</span>
           <span className="text-slate-300 text-sm font-medium truncate max-w-xs">{project.name}</span>
           <div className="ml-auto"><StatusBadge status={project.status} /></div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <main className="max-w-6xl mx-auto px-6 py-10 flex-1 w-full grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
           <div>
-            <h1 className="text-xl font-bold mb-1">{project.name}</h1>
+            <h1 className="text-2xl font-bold mb-2">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
+                {project.name}
+              </span>
+            </h1>
             <p className="text-slate-400 text-sm leading-relaxed">{project.description}</p>
           </div>
 
           {genError && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-lg">
+            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl">
               {genError}
             </div>
           )}
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <button
               onClick={handleGenerate}
               disabled={generating || project.status === "generating"}
-              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-5 py-2.5 rounded-xl transition text-sm"
+              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-5 py-2.5 rounded-xl transition text-sm shadow-lg shadow-indigo-900/40"
             >
               {generating ? "Generating…" : project.status === "completed" ? "Re-generate" : "Generate artifacts"}
             </button>
@@ -163,9 +171,9 @@ export default function ProjectDetail() {
             {project.status === "completed" && (
               <button
                 onClick={() => navigate(`/projects/${id}/artifacts`)}
-                className="border border-slate-700 hover:border-indigo-500 text-slate-300 hover:text-white font-medium px-5 py-2.5 rounded-xl transition text-sm"
+                className="border border-slate-700 hover:border-indigo-500/60 text-slate-300 hover:text-white font-medium px-5 py-2.5 rounded-xl transition text-sm flex items-center gap-1.5"
               >
-                View artifacts <ArrowRight size={14} className="inline-block ml-0.5 align-middle" />
+                View artifacts <ArrowRight size={14} />
               </button>
             )}
           </div>
@@ -174,9 +182,9 @@ export default function ProjectDetail() {
         {/* Pipeline stages */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Pipeline stages</h2>
+            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Pipeline</h2>
             {stages.length > 0 && (
-              <span className="text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1 text-xs bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-full font-medium">
                 {stages.filter(s => s.status === "completed").length}/{stages.length}
               </span>
             )}
@@ -184,7 +192,7 @@ export default function ProjectDetail() {
           {stages.length > 0 && (
             <div className="h-1 bg-slate-800 rounded-full mb-4 overflow-hidden">
               <div
-                className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
                 style={{ width: `${(stages.filter(s => s.status === "completed").length / stages.length) * 100}%` }}
               />
             </div>
@@ -198,6 +206,10 @@ export default function ProjectDetail() {
           )}
         </div>
       </main>
+
+      <footer className="border-t border-slate-800 py-6 text-center text-slate-700 text-xs">
+        Req2UI · AASTMT Graduation Project · {new Date().getFullYear()}
+      </footer>
     </div>
   );
 }

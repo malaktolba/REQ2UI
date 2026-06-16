@@ -1100,11 +1100,15 @@ export default function ArtifactsViewer() {
     <div className="min-h-screen bg-slate-950 text-white">
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-3">
-          <Link to="/dashboard" className="text-slate-400 hover:text-white transition text-sm flex items-center gap-1">
+        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-4">
+          <Link to="/" className="text-xl font-bold text-white tracking-tight flex-shrink-0">
+            Req<span className="text-indigo-400">2</span>UI
+          </Link>
+          <span className="text-slate-700 text-lg font-light">/</span>
+          <Link to="/dashboard" className="text-slate-400 hover:text-white transition text-sm flex items-center gap-1 flex-shrink-0">
             <ArrowLeft size={14} /> Dashboard
           </Link>
-          <span className="text-slate-700">/</span>
+          <span className="text-slate-700 text-lg font-light">/</span>
           <Link to={`/projects/${id}`} className="text-slate-400 hover:text-white transition text-sm truncate max-w-xs">
             {project?.name}
           </Link>
