@@ -2,6 +2,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useNavigate, Link } from "react-router-dom";
 import { useProjects } from "../hooks/useProjects";
 import { ProjectCard } from "../components/ProjectCard";
+import { useToast } from "../context/ToastContext";
 
 function SkeletonCard() {
   return (
@@ -18,10 +19,20 @@ export default function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { projects, loading, error, remove } = useProjects();
+  const toast = useToast();
 
   async function handleLogout() {
     await logout();
     navigate("/login");
+  }
+
+  async function handleRemove(id: string) {
+    try {
+      await remove(id);
+      toast.success("Project deleted.");
+    } catch {
+      toast.error("Failed to delete project.");
+    }
   }
 
   return (
@@ -79,7 +90,7 @@ export default function Dashboard() {
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {projects.map((p) => (
-              <ProjectCard key={p.id} project={p} onDelete={remove} />
+              <ProjectCard key={p.id} project={p} onDelete={handleRemove} />
             ))}
           </div>
         )}

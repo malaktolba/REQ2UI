@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { fetchProject, fetchArtifacts } from "../api/projects";
 import type { Project, Artifact } from "../types/project";
 import api from "../api/axios";
+import { useToast } from "../context/ToastContext";
 
 // ─── Tab configuration ──────────────────────────────────────────────────────
 
@@ -383,6 +384,7 @@ export default function ArtifactsViewer() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("extraction");
   const [exporting, setExporting] = useState<string | null>(null);
+  const toast = useToast();
 
   async function handleExport(format: "pdf" | "docx" | "csv") {
     if (!id || exporting) return;
@@ -399,6 +401,9 @@ export default function ArtifactsViewer() {
       a.download = `${project?.name ?? "project"}_req2ui.${format}`;
       a.click();
       URL.revokeObjectURL(url);
+      toast.success(`${format.toUpperCase()} downloaded.`);
+    } catch {
+      toast.error(`Failed to export ${format.toUpperCase()}.`);
     } finally {
       setExporting(null);
     }

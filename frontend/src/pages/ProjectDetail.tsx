@@ -4,6 +4,7 @@ import { fetchProject } from "../api/projects";
 import type { Project, PipelineStage } from "../types/project";
 import { StatusBadge } from "../components/StatusBadge";
 import api from "../api/axios";
+import { useToast } from "../context/ToastContext";
 
 const STAGE_NAMES = [
   "Requirement Extraction",
@@ -41,6 +42,7 @@ function StageRow({ stage, name, status }: { stage: number; name: string; status
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const toast = useToast();
   const [project, setProject] = useState<Project | null>(null);
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,6 +85,7 @@ export default function ProjectDetail() {
         es.close();
         setGenerating(false);
         fetchProject(id).then(setProject);
+        toast.success("All 8 artifacts generated successfully!");
       });
 
       es.addEventListener("error", (e: any) => {
@@ -90,6 +93,7 @@ export default function ProjectDetail() {
         const msg = e.data ? JSON.parse(e.data)?.error : "Generation failed";
         setGenError(msg ?? "Generation failed");
         setGenerating(false);
+        toast.error("Pipeline failed. Please try again.");
       });
 
       es.onerror = () => {

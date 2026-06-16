@@ -1,6 +1,7 @@
 import { useState, FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { createProject } from "../api/projects";
+import { useToast } from "../context/ToastContext";
 
 const EXAMPLE_PROMPTS = [
   "A mobile app for university students to track attendance and grades with professor notifications.",
@@ -12,6 +13,7 @@ const MAX_DESC = 5000;
 
 export default function CreateProject() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
@@ -23,6 +25,7 @@ export default function CreateProject() {
     setLoading(true);
     try {
       const project = await createProject({ name, description });
+      toast.success("Project created! Run the pipeline to generate artifacts.");
       navigate(`/projects/${project.id}`);
     } catch (err: any) {
       setError(err?.response?.data?.error ?? "Failed to create project.");
