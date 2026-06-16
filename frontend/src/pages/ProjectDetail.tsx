@@ -173,9 +173,22 @@ export default function ProjectDetail() {
 
         {/* Pipeline stages */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-            Pipeline stages
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Pipeline stages</h2>
+            {stages.length > 0 && (
+              <span className="text-xs text-slate-500">
+                {stages.filter(s => s.status === "completed").length}/{stages.length}
+              </span>
+            )}
+          </div>
+          {stages.length > 0 && (
+            <div className="h-1 bg-slate-800 rounded-full mb-4 overflow-hidden">
+              <div
+                className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                style={{ width: `${(stages.filter(s => s.status === "completed").length / stages.length) * 100}%` }}
+              />
+            </div>
+          )}
           {stages.length === 0 ? (
             <p className="text-slate-600 text-sm">Run generation to see progress here.</p>
           ) : (

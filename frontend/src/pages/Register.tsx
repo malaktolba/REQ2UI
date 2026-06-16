@@ -44,11 +44,13 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4 relative overflow-hidden">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-600/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="w-full max-w-md relative">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white">Req2UI</h1>
-          <p className="text-slate-400 mt-1">Create your account</p>
+          <p className="text-slate-400 mt-1 text-sm">Requirements → Artifacts in minutes</p>
+          <p className="text-slate-600 text-xs mt-1">Create your account</p>
         </div>
 
         <form

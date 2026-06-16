@@ -257,43 +257,204 @@ function STCView({ data }: { data: any }) {
   );
 }
 
+// ─── Visual wireframe helpers ────────────────────────────────────────────────
+
+function WireframeShape({ c }: { c: any }) {
+  const t = (c.type ?? "").toLowerCase();
+
+  if (/navbar|header|app.?bar|navigation.?bar|top.?bar/.test(t))
+    return (
+      <div className="w-full h-8 bg-slate-700 flex items-center px-2 gap-1.5 flex-shrink-0">
+        <div className="w-2 h-2 bg-indigo-500/70 rounded-sm" />
+        <div className="h-1.5 bg-slate-500 rounded flex-1 max-w-[50%]" />
+        <div className="w-5 h-5 bg-slate-600 rounded-full ml-auto" />
+      </div>
+    );
+
+  if (/search/.test(t))
+    return (
+      <div className="mx-2 h-6 bg-slate-700 rounded-full flex items-center px-2 gap-1.5 flex-shrink-0">
+        <svg width="10" height="10" viewBox="0 0 10 10" className="text-slate-500 flex-shrink-0"><circle cx="4" cy="4" r="3" stroke="currentColor" strokeWidth="1.5" fill="none"/><line x1="7" y1="7" x2="9.5" y2="9.5" stroke="currentColor" strokeWidth="1.5"/></svg>
+        <div className="h-1.5 bg-slate-600 rounded flex-1" />
+      </div>
+    );
+
+  if (/button|cta|submit|action/.test(t))
+    return (
+      <div className="mx-2 flex-shrink-0">
+        <div className="h-7 bg-indigo-600/60 rounded-full flex items-center justify-center px-4">
+          <div className="h-1.5 bg-indigo-300/80 rounded w-14" />
+        </div>
+      </div>
+    );
+
+  if (/input|text.?field|form.?field|email|password|text.?input|field/.test(t))
+    return (
+      <div className="mx-2 h-7 border border-slate-600 rounded-md bg-slate-800/60 flex items-center px-2 flex-shrink-0">
+        <div className="h-1.5 bg-slate-600 rounded w-2/3" />
+        <div className="w-1 h-4 bg-slate-500 ml-1 opacity-60 animate-pulse" />
+      </div>
+    );
+
+  if (/image|avatar|banner|photo|picture|thumbnail/.test(t))
+    return (
+      <div className="mx-2 h-14 bg-slate-700 rounded-md flex items-center justify-center flex-shrink-0">
+        <svg width="20" height="20" viewBox="0 0 20 20" className="text-slate-500"><rect x="2" y="2" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/><path d="M2 13l4-4 3 3 3-3 6 6" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
+      </div>
+    );
+
+  if (/card|post.?card|product.?card|item.?card/.test(t))
+    return (
+      <div className="mx-2 border border-slate-600 rounded-md p-2 flex-shrink-0">
+        <div className="h-1.5 bg-slate-400 rounded w-3/4 mb-1.5" />
+        <div className="h-1 bg-slate-700 rounded mb-1" />
+        <div className="h-1 bg-slate-700 rounded w-5/6" />
+      </div>
+    );
+
+  if (/list|feed|table|data.?table|grid/.test(t))
+    return (
+      <div className="mx-2 flex-shrink-0 rounded-md overflow-hidden border border-slate-700">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className={`h-5 flex items-center px-2 gap-2 ${i % 2 === 0 ? "bg-slate-800" : "bg-slate-800/40"}`}>
+            <div className="w-2 h-2 bg-slate-600 rounded-sm flex-shrink-0" />
+            <div className="h-1 bg-slate-600 rounded flex-1" />
+            <div className="h-1 bg-slate-700 rounded w-8" />
+          </div>
+        ))}
+      </div>
+    );
+
+  if (/tab.?bar|bottom.?nav|bottom.?navigation|footer/.test(t))
+    return (
+      <div className="w-full h-9 bg-slate-800 border-t border-slate-700 flex items-center justify-around px-4 mt-auto flex-shrink-0">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="flex flex-col items-center gap-0.5">
+            <div className={`w-3.5 h-3.5 rounded-sm ${i === 0 ? "bg-indigo-500" : "bg-slate-600"}`} />
+            <div className="h-1 w-5 bg-slate-700 rounded" />
+          </div>
+        ))}
+      </div>
+    );
+
+  if (/heading|title/.test(t))
+    return (
+      <div className="mx-2 flex-shrink-0">
+        <div className="h-3 bg-slate-300/60 rounded w-2/3 mb-1" />
+      </div>
+    );
+
+  if (/text|label|paragraph|description/.test(t))
+    return (
+      <div className="mx-2 flex-shrink-0 space-y-1">
+        <div className="h-1.5 bg-slate-600 rounded" />
+        <div className="h-1.5 bg-slate-600 rounded w-5/6" />
+        <div className="h-1.5 bg-slate-700 rounded w-3/4" />
+      </div>
+    );
+
+  if (/icon|badge/.test(t))
+    return (
+      <div className="mx-2 w-7 h-7 bg-slate-700 rounded-lg flex-shrink-0 flex items-center justify-center">
+        <div className="w-3 h-3 bg-slate-500 rounded-sm" />
+      </div>
+    );
+
+  if (/notification|alert|banner/.test(t))
+    return (
+      <div className="mx-2 h-8 bg-indigo-900/60 border border-indigo-700/50 rounded-md flex items-center px-2 gap-1.5 flex-shrink-0">
+        <div className="w-2 h-2 bg-indigo-400 rounded-full flex-shrink-0" />
+        <div className="h-1.5 bg-indigo-600/80 rounded flex-1" />
+      </div>
+    );
+
+  // default — generic labeled block
+  return (
+    <div className="mx-2 h-7 border border-dashed border-slate-700 rounded-md flex items-center px-2 gap-1.5 flex-shrink-0">
+      <div className="h-1.5 bg-slate-600 rounded flex-1" />
+      <span className="text-[8px] text-slate-600 font-mono flex-shrink-0 uppercase">{(c.type ?? "").slice(0, 8)}</span>
+    </div>
+  );
+}
+
+function PhoneMockup({ components }: { components: any[] }) {
+  return (
+    <div className="relative flex-shrink-0" style={{ width: 200, height: 390 }}>
+      {/* phone shell */}
+      <div className="absolute inset-0 rounded-[30px] border-[5px] border-slate-600 bg-slate-900 overflow-hidden shadow-2xl shadow-black/60">
+        {/* status bar */}
+        <div className="h-5 bg-slate-800/80 flex items-center justify-between px-3 flex-shrink-0">
+          <div className="flex gap-1">
+            <div className="w-1 h-1 bg-slate-500 rounded-full" />
+            <div className="w-1 h-1 bg-slate-500 rounded-full" />
+            <div className="w-1 h-1 bg-slate-500 rounded-full" />
+          </div>
+          <div className="w-8 h-2 bg-slate-700 rounded-sm" />
+        </div>
+        {/* content area */}
+        <div className="flex flex-col gap-1.5 py-1.5 overflow-hidden" style={{ height: "calc(100% - 20px)" }}>
+          {components.map((c, i) => <WireframeShape key={i} c={c} />)}
+        </div>
+      </div>
+      {/* side button */}
+      <div className="absolute -right-[5px] top-20 w-[4px] h-10 bg-slate-600 rounded-r-sm" />
+      <div className="absolute -left-[5px] top-16 w-[4px] h-7 bg-slate-600 rounded-l-sm" />
+      <div className="absolute -left-[5px] top-[100px] w-[4px] h-7 bg-slate-600 rounded-l-sm" />
+      {/* home indicator */}
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-12 h-1 bg-slate-600 rounded-full" />
+    </div>
+  );
+}
+
 function WireframesView({ data }: { data: any }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {data.screens?.map((sc: any) => (
-        <div key={sc.id} className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-          <div className="flex items-center gap-3 mb-3">
+        <div key={sc.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-5 flex-wrap">
             <span className="text-xs font-mono text-pink-400 bg-pink-500/10 border border-pink-500/20 px-2 py-0.5 rounded">{sc.id}</span>
-            <span className="font-semibold text-slate-200">{sc.name}</span>
-            {sc.route && <span className="text-xs text-slate-500 font-mono">{sc.route}</span>}
+            <span className="font-bold text-slate-200">{sc.name}</span>
+            {sc.route && <span className="text-xs text-slate-500 font-mono bg-slate-800 px-2 py-0.5 rounded">{sc.route}</span>}
           </div>
-          {sc.description && <p className="text-slate-400 text-sm leading-relaxed mb-4">{sc.description}</p>}
-          {sc.components?.length > 0 && (
-            <div className="mb-4">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">Components</p>
-              <div className="grid grid-cols-1 gap-2">
-                {sc.components.map((c: any, i: number) => (
-                  <div key={i} className="flex items-start gap-3 bg-slate-800/50 rounded-lg px-3 py-2">
-                    <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded font-mono flex-shrink-0">{c.type}</span>
-                    <div>
-                      <span className="text-sm text-slate-200 font-medium">{c.label}</span>
-                      {c.purpose && <p className="text-xs text-slate-500 mt-0.5">{c.purpose}</p>}
-                    </div>
+
+          <div className="flex gap-8 flex-wrap">
+            <PhoneMockup components={sc.components ?? []} />
+
+            <div className="flex-1 min-w-[180px] space-y-4">
+              {sc.description && (
+                <p className="text-slate-400 text-sm leading-relaxed">{sc.description}</p>
+              )}
+              {sc.components?.length > 0 && (
+                <div>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">
+                    Components <span className="text-slate-700 font-normal normal-case">({sc.components.length})</span>
+                  </p>
+                  <div className="space-y-1.5">
+                    {sc.components.map((c: any, i: number) => (
+                      <div key={i} className="flex items-start gap-2 text-xs">
+                        <span className="bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono flex-shrink-0">{c.type}</span>
+                        <span className="text-slate-300 font-medium">{c.label}</span>
+                        {c.purpose && <span className="text-slate-600">— {c.purpose}</span>}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+              {sc.navigation?.length > 0 && (
+                <div>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">Navigation</p>
+                  <ul className="space-y-1">
+                    {sc.navigation.map((n: string, i: number) => (
+                      <li key={i} className="text-xs text-indigo-400 flex gap-1.5">
+                        <span className="flex-shrink-0">→</span>
+                        <span>{n}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
-          )}
-          {sc.navigation?.length > 0 && (
-            <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">Navigation</p>
-              <ul className="space-y-1">
-                {sc.navigation.map((n: string, i: number) => (
-                  <li key={i} className="text-xs text-slate-400">{n}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          </div>
         </div>
       ))}
     </div>
@@ -358,21 +519,89 @@ function TraceabilityView({ data }: { data: any }) {
   );
 }
 
+// ─── Artifact count helper ───────────────────────────────────────────────────
+
+function artifactCount(key: TabKey, content: any): number | null {
+  if (!content) return null;
+  switch (key) {
+    case "extraction":                  return content.extracted?.length ?? null;
+    case "functional_requirements":     return content.requirements?.length ?? null;
+    case "non_functional_requirements": return content.requirements?.length ?? null;
+    case "security_requirements":       return content.requirements?.length ?? null;
+    case "functional_test_cases":       return content.test_cases?.length ?? null;
+    case "security_test_cases":         return content.test_cases?.length ?? null;
+    case "wireframes":                  return content.screens?.length ?? null;
+    case "traceability_matrix":         return content.matrix?.length ?? null;
+    default:                            return null;
+  }
+}
+
+function ArtifactSummary({ tabKey, content }: { tabKey: TabKey; content: any }) {
+  if (!content) return null;
+  let text = "";
+  switch (tabKey) {
+    case "extraction":
+      text = `${content.extracted?.length ?? 0} requirements extracted · ${content.actors?.length ?? 0} actors`;
+      break;
+    case "functional_requirements": {
+      const high = content.requirements?.filter((r: any) => r.priority === "High").length ?? 0;
+      text = `${content.requirements?.length ?? 0} requirements · ${high} high priority`;
+      break;
+    }
+    case "non_functional_requirements": {
+      const cats = new Set(content.requirements?.map((r: any) => r.category) ?? []).size;
+      text = `${content.requirements?.length ?? 0} requirements across ${cats} categories`;
+      break;
+    }
+    case "security_requirements":
+      text = `${content.requirements?.length ?? 0} security requirements mapped to OWASP Top 10`;
+      break;
+    case "functional_test_cases":
+      text = `${content.test_cases?.length ?? 0} test cases (IEEE 829)`;
+      break;
+    case "security_test_cases":
+      text = `${content.test_cases?.length ?? 0} security test cases`;
+      break;
+    case "wireframes":
+      text = `${content.screens?.length ?? 0} screens`;
+      break;
+    case "traceability_matrix": {
+      const cov = content.coverage;
+      text = cov ? `${cov.covered_frs}/${cov.total_frs} FRs covered · ${cov.total_tcs} test cases · ${cov.percentage}% coverage` : "";
+      break;
+    }
+  }
+  if (!text) return null;
+  return (
+    <div className="flex items-center gap-2 mb-5 text-xs text-slate-400 bg-slate-900 border border-slate-800 rounded-lg px-4 py-2.5">
+      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0" />
+      {text}
+    </div>
+  );
+}
+
 // ─── Content dispatcher ──────────────────────────────────────────────────────
 
 function ArtifactContent({ tabKey, content }: { tabKey: TabKey; content: any }) {
   if (!content) return <p className="text-slate-500 text-sm">No data available.</p>;
-  switch (tabKey) {
-    case "extraction":                return <ExtractionView data={content} />;
-    case "functional_requirements":   return <FRView data={content} />;
-    case "non_functional_requirements": return <NFRView data={content} />;
-    case "security_requirements":     return <SRView data={content} />;
-    case "functional_test_cases":     return <FTCView data={content} />;
-    case "security_test_cases":       return <STCView data={content} />;
-    case "wireframes":                return <WireframesView data={content} />;
-    case "traceability_matrix":       return <TraceabilityView data={content} />;
-    default:                          return <pre className="text-xs text-slate-400 overflow-auto">{JSON.stringify(content, null, 2)}</pre>;
-  }
+  return (
+    <>
+      <ArtifactSummary tabKey={tabKey} content={content} />
+      {(() => {
+        switch (tabKey) {
+          case "extraction":                return <ExtractionView data={content} />;
+          case "functional_requirements":   return <FRView data={content} />;
+          case "non_functional_requirements": return <NFRView data={content} />;
+          case "security_requirements":     return <SRView data={content} />;
+          case "functional_test_cases":     return <FTCView data={content} />;
+          case "security_test_cases":       return <STCView data={content} />;
+          case "wireframes":                return <WireframesView data={content} />;
+          case "traceability_matrix":       return <TraceabilityView data={content} />;
+          default:                          return <pre className="text-xs text-slate-400 overflow-auto">{JSON.stringify(content, null, 2)}</pre>;
+        }
+      })()}
+    </>
+  );
 }
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -480,7 +709,10 @@ export default function ArtifactsViewer() {
                     : "text-slate-700 cursor-not-allowed",
                 ].join(" ")}
               >
-                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="hidden sm:inline">
+                  {tab.label}
+                  {(() => { const n = artifactCount(tab.key, artifactMap[tab.key]); return n !== null ? <span className={`ml-1 text-xs ${active ? "text-indigo-200" : "text-slate-600"}`}>({n})</span> : null; })()}
+                </span>
                 <span className="sm:hidden">{tab.short}</span>
               </button>
             );

@@ -66,6 +66,22 @@ export default function Dashboard() {
           </Link>
         </div>
 
+        {/* Stats bar */}
+        {!loading && projects.length > 0 && (
+          <div className="flex gap-4 mb-8 flex-wrap">
+            {[
+              { label: "Total Projects", value: projects.length },
+              { label: "Completed", value: projects.filter(p => p.status === "completed").length },
+              { label: "Total Artifacts", value: projects.reduce((s, p) => s + (p.artifact_count ?? 0), 0) },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-slate-900 border border-slate-800 rounded-xl px-5 py-3 flex items-center gap-3">
+                <span className="text-2xl font-bold text-indigo-400">{value}</span>
+                <span className="text-xs text-slate-500">{label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {error && (
           <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-lg mb-6">
             {error}

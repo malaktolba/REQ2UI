@@ -27,7 +27,7 @@ export function ProjectCard({ project, onDelete }: Props) {
   return (
     <div
       onClick={() => navigate(`/projects/${project.id}`)}
-      className="bg-slate-900 border border-slate-800 rounded-2xl p-5 cursor-pointer hover:border-indigo-500/50 transition group"
+      className="bg-slate-900 border border-slate-800 rounded-2xl p-5 cursor-pointer hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/5 transition group"
     >
       <div className="flex items-start justify-between gap-2 mb-3">
         <h3 className="text-white font-semibold text-base leading-snug line-clamp-2 group-hover:text-indigo-300 transition">
@@ -41,7 +41,10 @@ export function ProjectCard({ project, onDelete }: Props) {
       </p>
 
       <div className="flex items-center justify-between text-xs text-slate-500">
-        <span>{project.artifact_count} artifact{project.artifact_count !== 1 ? "s" : ""}</span>
+        <div className="flex flex-col gap-0.5">
+          <span>{project.artifact_count} artifact{project.artifact_count !== 1 ? "s" : ""}</span>
+          <span className="text-slate-700">{new Date(project.created_at).toLocaleDateString()}</span>
+        </div>
         <button
           onClick={handleDelete}
           disabled={deleting}
