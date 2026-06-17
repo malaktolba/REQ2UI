@@ -569,13 +569,14 @@ function MermaidDiagram({ code, uid }: { code: string; uid: string }) {
         const { svg } = await mermaid.render(`mermaid-${uid}`, code);
         if (!cancelled && ref.current) {
           ref.current.innerHTML = svg;
-          // remove fixed width/height so diagram scales with container
           const svgEl = ref.current.querySelector("svg");
           if (svgEl) {
             svgEl.removeAttribute("width");
             svgEl.removeAttribute("height");
+            svgEl.style.display = "block";
             svgEl.style.width = "100%";
-            svgEl.style.maxWidth = "100%";
+            svgEl.style.maxWidth = "680px";
+            svgEl.style.margin = "0 auto";
           }
         }
       } catch (e: any) {

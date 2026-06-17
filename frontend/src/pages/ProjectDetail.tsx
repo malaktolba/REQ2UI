@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { fetchProject } from "../api/projects";
+import { fetchProject, updateProject } from "../api/projects";
 import type { Project, PipelineStage } from "../types/project";
 import { StatusBadge } from "../components/StatusBadge";
 import { useToast } from "../context/ToastContext";
@@ -50,6 +50,10 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -110,6 +114,28 @@ export default function ProjectDetail() {
     }
   }
 
+  function startEdit() {
+    if (!project) return;
+    setEditName(project.name);
+    setEditDesc(project.description);
+    setEditing(true);
+  }
+
+  async function handleSaveEdit() {
+    if (!id || !project) return;
+    setSaving(true);
+    try {
+      const updated = await updateProject(id, { name: editName.trim(), description: editDesc.trim() });
+      setProject(updated);
+      setEditing(false);
+      toast.success("Project updated.");
+    } catch {
+      toast.error("Failed to save changes.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -150,14 +176,60 @@ export default function ProjectDetail() {
       <main className="max-w-6xl mx-auto px-6 py-10 flex-1 w-full grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold mb-2">
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
-                {project.name}
-              </span>
-            </h1>
-            <p className="text-slate-400 light:text-slate-600 text-sm leading-relaxed">{project.description}</p>
-          </div>
+          {editing ? (
+            <div className="space-y-3">
+              <input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                maxLength={200}
+                className="w-full bg-slate-800 light:bg-white border border-slate-700 light:border-slate-300 rounded-xl px-4 py-2.5 text-lg font-bold text-white light:text-slate-900 focus:outline-none focus:border-indigo-500 transition"
+                placeholder="Project name"
+              />
+              <textarea
+                value={editDesc}
+                onChange={(e) => setEditDesc(e.target.value)}
+                rows={5}
+                maxLength={5000}
+                className="w-full bg-slate-800 light:bg-white border border-slate-700 light:border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-300 light:text-slate-700 focus:outline-none focus:border-indigo-500 transition resize-none leading-relaxed"
+                placeholder="Project description"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={saving || !editName.trim() || !editDesc.trim()}
+                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
+                >
+                  {saving ? "Saving…" : "Save"}
+                </button>
+                <button
+                  onClick={() => setEditing(false)}
+                  className="text-slate-400 hover:text-white light:hover:text-slate-900 text-sm px-4 py-2 rounded-lg border border-slate-700 light:border-slate-300 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="group relative">
+              <div className="flex items-start gap-2">
+                <h1 className="text-2xl font-bold mb-2 flex-1">
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
+                    {project.name}
+                  </span>
+                </h1>
+                <button
+                  onClick={startEdit}
+                  title="Edit project"
+                  className="mt-1 flex-shrink-0 p-1.5 rounded-lg text-slate-600 hover:text-slate-300 light:hover:text-slate-700 hover:bg-slate-800 light:hover:bg-slate-100 transition opacity-0 group-hover:opacity-100"
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 2l2 2-7 7H3v-2l7-7z"/>
+                  </svg>
+                </button>
+              </div>
+              <p className="text-slate-400 light:text-slate-600 text-sm leading-relaxed">{project.description}</p>
+            </div>
+          )}
 
           {genError && (
             <div className="bg-red-500/10 light:bg-red-50 border border-red-500/30 light:border-red-200 text-red-400 light:text-red-600 text-sm px-4 py-3 rounded-xl">
