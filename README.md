@@ -1,25 +1,28 @@
 # Req2UI
 
-> **AASTMT Graduation Project** — Transforms a natural-language software description into a full set of IEEE-standard artifacts using an 8-stage AI pipeline.
+> **AASTMT Graduation Project** — Transforms a natural-language software description into a complete set of IEEE-standard software engineering artifacts using a 9-stage AI pipeline.
+
+**Live demo:** [req-2-ui.vercel.app](https://req-2-ui.vercel.app)
 
 ---
 
 ## What it does
 
-Paste a project description and Req2UI generates:
+Paste a project description and Req2UI streams through 9 pipeline stages, generating:
 
 | # | Artifact | Standard |
 |---|----------|----------|
 | 1 | Requirement extraction | — |
 | 2 | Functional requirements | IEEE 830 |
 | 3 | Non-functional requirements | IEEE 830 |
-| 4 | Security requirements | OWASP Top 10 |
+| 4 | Security requirements | OWASP Top 10 (2021) |
 | 5 | Functional test cases | IEEE 829 |
 | 6 | Security test cases | — |
 | 7 | UI wireframe descriptions | — |
-| 8 | Traceability matrix | — |
+| 8 | UML diagrams (Use Case, Class, Sequence) | UML 2.x / Mermaid.js |
+| 9 | Traceability matrix | — |
 
-All artifacts are viewable in a tabbed UI and exportable as **PDF**, **DOCX**, or **CSV**.
+Artifacts are viewable in an IEEE 830-structured SRS document tab and individually, with export to **PDF**, **DOCX**, **CSV**, and **LaTeX**.
 
 ---
 
@@ -28,12 +31,13 @@ All artifacts are viewable in a tabbed UI and exportable as **PDF**, **DOCX**, o
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18, TypeScript, Tailwind CSS v4, Vite |
-| Backend | Node.js, Express, TypeScript |
+| Backend | Node.js 22, Express, TypeScript |
 | Database | PostgreSQL (Neon serverless) |
-| Auth | JWT (15 min) + Refresh tokens + httpOnly cookies |
+| Auth | JWT (15 min access) + Refresh tokens + httpOnly cookies |
 | AI | Groq API — llama-3.3-70b-versatile |
-| Export | pdfkit, docx.js, csv-writer |
-| Deployment | Vercel (frontend) + Render (backend) |
+| Export | pdfkit, docx.js, Mermaid.js → PNG (resvg-js) |
+| UML rendering | Mermaid.js (browser) + resvg-js (PDF export) |
+| Deployment | Vercel (frontend) · Render (backend) |
 
 ---
 
@@ -41,34 +45,35 @@ All artifacts are viewable in a tabbed UI and exportable as **PDF**, **DOCX**, o
 
 ### Prerequisites
 
-- Node.js 18+
-- A [Neon](https://neon.tech) PostgreSQL database
+- Node.js 20+
+- A [Neon](https://neon.tech) PostgreSQL database (free tier works)
 - A [Groq](https://console.groq.com) API key (free)
 
-### 1. Clone the repo
+### 1. Clone
 
 ```bash
 git clone https://github.com/malaktolba/REQ2UI.git
 cd REQ2UI
 ```
 
-### 2. Backend setup
+### 2. Backend
 
 ```bash
 cd backend
 cp .env.example .env
-# Fill in DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET, GROQ_API_KEY
+# Fill in: DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET, GROQ_API_KEY, FRONTEND_URL
 npm install
-npm run migrate
-npm run dev        # runs on http://localhost:4000
+npm run migrate      # creates tables in Neon
+npm run dev          # http://localhost:4000
 ```
 
-### 3. Frontend setup
+### 3. Frontend
 
 ```bash
 cd frontend
+# VITE_API_BASE_URL is empty for local dev — Vite proxy forwards /api → localhost:4000
 npm install
-npm run dev        # runs on http://localhost:5173
+npm run dev          # http://localhost:5173
 ```
 
 ---
@@ -79,43 +84,66 @@ npm run dev        # runs on http://localhost:5173
 REQ2UI/
 ├── backend/
 │   ├── src/
-│   │   ├── config/       # env validation
-│   │   ├── db/           # Neon client + migrations
-│   │   ├── middleware/   # JWT auth guard
-│   │   ├── routes/       # auth, projects, generate
-│   │   └── services/     # Groq wrapper, pipeline orchestrator, token service
+│   │   ├── config/         # env validation (zod)
+│   │   ├── db/             # Neon client + migrations
+│   │   ├── middleware/      # JWT auth guard
+│   │   ├── routes/         # auth · projects · generate · export · artifacts
+│   │   └── services/
+│   │       ├── groq.service.ts      # Groq SDK wrapper
+│   │       ├── pipeline.service.ts  # 9-stage orchestrator + SSE
+│   │       └── export.service.ts    # PDF · DOCX · LaTeX · CSV
 │   └── package.json
 ├── frontend/
 │   ├── src/
-│   │   ├── api/          # axios instance + API helpers
-│   │   ├── components/   # StatusBadge, ProjectCard, ProtectedRoute
-│   │   ├── context/      # AuthContext
-│   │   ├── hooks/        # useAuth, useProjects
-│   │   ├── pages/        # Login, Register, Dashboard, CreateProject, ProjectDetail
-│   │   └── types/        # shared TypeScript types
-│   └── package.json
-└── req2ui-plan.md
+│   │   ├── api/            # axios instance + project helpers
+│   │   ├── components/     # Icons, ThemeToggle, ProtectedRoute, Toast
+│   │   ├── context/        # AuthContext · ToastContext · ThemeContext
+│   │   ├── pages/
+│   │   │   ├── ArtifactsViewer.tsx  # tabbed SRS viewer + IEEE 830 doc view
+│   │   │   ├── ProjectDetail.tsx     # SSE pipeline progress
+│   │   │   ├── Dashboard.tsx
+│   │   │   └── ...
+│   │   └── types/
+│   └── vercel.json
+├── render.yaml
+└── README.md
 ```
 
 ---
 
-## API Endpoints
+## API Reference
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/auth/register` | Create account |
-| POST | `/api/auth/login` | Login |
-| POST | `/api/auth/refresh` | Refresh access token |
-| POST | `/api/auth/logout` | Logout |
+| POST | `/api/auth/login` | Login, sets httpOnly refresh cookie |
+| POST | `/api/auth/refresh` | Rotate access token |
+| POST | `/api/auth/logout` | Clear cookies |
 | GET | `/api/auth/me` | Current user |
-| GET | `/api/projects` | List projects |
+| GET | `/api/projects` | List user's projects |
 | POST | `/api/projects` | Create project |
-| GET | `/api/projects/:id` | Get project + stages |
-| PUT | `/api/projects/:id` | Update project |
+| GET | `/api/projects/:id` | Get project + stage statuses |
 | DELETE | `/api/projects/:id` | Soft delete |
-| GET | `/api/projects/:id/generate` | Run pipeline (SSE stream) |
+| GET | `/api/projects/:id/generate` | Run pipeline — SSE stream (`?token=<jwt>`) |
 | GET | `/api/projects/:id/artifacts` | All artifacts |
 | GET | `/api/projects/:id/artifacts/:type` | Single artifact |
+| POST | `/api/projects/:id/export/pdf` | Export PDF (body: `{ diagramSvgs }`) |
+| GET | `/api/projects/:id/export/docx` | Export DOCX |
+| GET | `/api/projects/:id/export/csv` | Export CSV |
+| GET | `/api/projects/:id/export/latex` | Export LaTeX (.tex) |
+
+---
+
+## Deployment
+
+| Service | Platform | Config |
+|---------|----------|--------|
+| Backend | Render (free) | `render.yaml` · build: `npm install --include=dev && npm run build` |
+| Frontend | Vercel | `frontend/vercel.json` · root dir: `frontend/` |
+
+**Required env vars on Render:** `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `GROQ_API_KEY`, `FRONTEND_URL`, `NODE_ENV=production`
+
+**Required env vars on Vercel:** `VITE_API_BASE_URL=https://req2ui-backend.onrender.com`
 
 ---
 
