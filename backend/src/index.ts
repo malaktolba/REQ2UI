@@ -11,6 +11,13 @@ import exportRoutes from "./routes/export.routes";
 
 const app = express();
 
+// Render (and most PaaS) run the app behind a reverse proxy that sets the
+// X-Forwarded-For header. Without trust proxy, express-rate-limit throws
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR and req.ip is wrong. Trust exactly one
+// proxy hop (not `true`) so clients can't spoof X-Forwarded-For to dodge
+// the rate limiters.
+app.set("trust proxy", 1);
+
 app.use(helmet());
 app.use(cors({
   origin: env.FRONTEND_URL,
