@@ -88,7 +88,7 @@ export default function ProjectDetail() {
         es.close();
         setGenerating(false);
         fetchProject(id).then(setProject);
-        toast.success("All 9 artifacts generated successfully!");
+        toast.success("All 10 artifacts generated successfully!");
       });
 
       es.addEventListener("error", (e: any) => {

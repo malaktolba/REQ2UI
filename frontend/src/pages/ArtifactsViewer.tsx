@@ -1178,6 +1178,8 @@ export default function ArtifactsViewer() {
   const [activeTab, setActiveTab] = useState<TabKey>("extraction");
   const [exporting, setExporting] = useState<string | null>(null);
   const [diagramSvgsForExport, setDiagramSvgsForExport] = useState<Record<string, string>>({});
+  const [generatingUI, setGeneratingUI] = useState(false);
+  const [uiGenStage, setUiGenStage] = useState<string>("");
   const toast = useToast();
 
   async function handleExport(format: "pdf" | "docx" | "csv" | "latex") {
@@ -1208,6 +1210,45 @@ export default function ArtifactsViewer() {
     } finally {
       setExporting(null);
     }
+  }
+
+  function handleGenerateUI() {
+    if (!id || generatingUI) return;
+    setGeneratingUI(true);
+    setUiGenStage("Starting…");
+
+    const token = sessionStorage.getItem("access_token") ?? "";
+    const base = import.meta.env.VITE_API_BASE_URL ?? "";
+    const es = new EventSource(`${base}/api/projects/${id}/generate/ui-code?token=${token}`);
+
+    es.addEventListener("stage", (e) => {
+      const d = JSON.parse(e.data);
+      setUiGenStage(d.status === "running" ? "Generating screens…" : d.status === "completed" ? "Done!" : d.name);
+    });
+
+    es.addEventListener("done", () => {
+      es.close();
+      setGeneratingUI(false);
+      setUiGenStage("");
+      // Refresh artifacts to show the new ui_code tab
+      if (id) fetchArtifacts(id).then(setArtifacts);
+      toast.success("UI code generated!");
+    });
+
+    es.addEventListener("error", (e: any) => {
+      es.close();
+      setGeneratingUI(false);
+      setUiGenStage("");
+      const msg = e.data ? JSON.parse(e.data)?.error : null;
+      toast.error(msg ?? "UI code generation failed.");
+    });
+
+    es.onerror = () => {
+      es.close();
+      setGeneratingUI(false);
+      setUiGenStage("");
+      toast.error("Connection lost during UI generation.");
+    };
   }
 
   useEffect(() => {
@@ -1335,13 +1376,41 @@ export default function ArtifactsViewer() {
           })}
         </div>
 
+        {/* UI Code generation prompt (when tab selected but artifact missing) */}
+        {activeTab === "ui_code" && !availableKeys.has("ui_code") && availableKeys.has("wireframes") && (
+          <div className="flex flex-col items-center justify-center py-20 gap-5 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-2xl">⚡</div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-100 light:text-slate-900 mb-1">UI Code not yet generated</h3>
+              <p className="text-slate-500 text-sm max-w-sm">
+                Generates standalone HTML + Tailwind pages for each wireframe screen using a two-pass AI pipeline (~60 seconds).
+              </p>
+            </div>
+            {generatingUI ? (
+              <div className="flex items-center gap-3 text-sm text-indigo-400">
+                <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                {uiGenStage || "Generating…"}
+              </div>
+            ) : (
+              <button
+                onClick={handleGenerateUI}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-2.5 rounded-xl transition text-sm shadow-lg shadow-indigo-900/30"
+              >
+                Generate UI Code
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Content */}
-        <ArtifactContent
-          tabKey={activeTab}
-          content={artifactMap[activeTab]}
-          artifactMap={artifactMap}
-          projectName={project?.name}
-        />
+        {!(activeTab === "ui_code" && !availableKeys.has("ui_code") && availableKeys.has("wireframes")) && (
+          <ArtifactContent
+            tabKey={activeTab}
+            content={artifactMap[activeTab]}
+            artifactMap={artifactMap}
+            projectName={project?.name}
+          />
+        )}
       </div>
     </div>
   );

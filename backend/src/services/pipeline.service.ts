@@ -216,6 +216,25 @@ System: ${s1.system_summary}`
   }
 }
 
+/** Re-runs only Stage 10 for a project that already has the prerequisite artifacts. */
+export async function regenerateUICode(projectId: string, userId: string, emit: Emit): Promise<void> {
+  const projectRows = await sql`
+    SELECT name FROM projects WHERE id = ${projectId} AND user_id = ${userId} AND deleted_at IS NULL
+  ` as any[];
+  if (!projectRows.length) throw new Error("Project not found");
+
+  const artifactRows = await sql`
+    SELECT type, content FROM artifacts WHERE project_id = ${projectId}
+  ` as any[];
+  const data = Object.fromEntries(artifactRows.map((a: any) => [a.type, a.content]));
+
+  if (!data.extraction || !data.functional_requirements || !data.wireframes) {
+    throw new Error("Prerequisite artifacts missing — run the full pipeline first");
+  }
+
+  await generateUICodeMultipass(projectId, projectRows[0].name, data.extraction, data.functional_requirements, data.wireframes, emit);
+}
+
 export async function runPipeline(
   projectId: string,
   projectName: string,

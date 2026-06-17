@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { sql } from "../db/client";
 import { requireAuth } from "../middleware/auth.middleware";
-import { runPipeline } from "../services/pipeline.service";
+import { runPipeline, regenerateUICode } from "../services/pipeline.service";
 
 const router = Router();
 
@@ -52,6 +52,28 @@ router.get("/:id/generate", requireAuth, genLimiter, async (req: Request, res: R
     send("done", { message: "Pipeline complete" });
   } catch (err: any) {
     send("error", { error: err?.message ?? "Pipeline failed" });
+  } finally {
+    res.end();
+  }
+});
+
+// GET /api/projects/:id/generate/ui-code  (SSE — re-runs Stage 10 only)
+router.get("/:id/generate/ui-code", requireAuth, genLimiter, async (req: Request, res: Response): Promise<void> => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (event: string, data: object) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    await regenerateUICode(req.params.id as string, req.user!.sub, (ev) => send("stage", ev));
+    send("done", { message: "UI code generation complete" });
+  } catch (err: any) {
+    send("error", { error: err?.message ?? "Generation failed" });
   } finally {
     res.end();
   }
