@@ -20,6 +20,17 @@ const STAGE_NAMES = [
   "UI Code Generation",
 ];
 
+/** Turn a raw backend/Groq error into something a user can act on. */
+function humanizeGenError(raw: string): string {
+  if (/rate.?limit|429|tokens per day|TPD/i.test(raw)) {
+    const retry = raw.match(/try again in ([\dhms.\s]+?)[.\"]/i)?.[1]?.trim();
+    return `Groq daily token limit reached — the free tier allows ~100k tokens/day and a full run uses most of it. ${
+      retry ? `Try again in ${retry}.` : "Try again later."
+    } Or upgrade the Groq plan for higher limits.`;
+  }
+  return raw;
+}
+
 function StageIcon({ status }: { status: string }) {
   if (status === "completed") return <CheckIcon size={15} className="text-green-400" />;
   if (status === "running")   return <SpinnerIcon size={15} className="text-yellow-400 animate-spin" />;
@@ -89,12 +100,20 @@ export default function ProjectDetail() {
       const base = import.meta.env.VITE_API_BASE_URL ?? "";
       const es = new EventSource(`${base}/api/projects/${id}/generate?token=${token}`);
 
+      // Captured in the closure so the connection-drop handler can surface the
+      // real per-stage error (e.g. a Groq rate limit) instead of a generic
+      // "connection lost" — the stream always closes after a failed stage.
+      let stageError = "";
+      let settled = false;
+
       es.addEventListener("stage", (e) => {
         const data = JSON.parse(e.data) as PipelineStage;
         setStages((prev) => prev.map((s) => (s.stage === data.stage ? data : s)));
+        if (data.status === "failed" && data.error) stageError = data.error;
       });
 
       es.addEventListener("done", () => {
+        settled = true;
         es.close();
         setGenerating(false);
         fetchProject(id).then(setProject);
@@ -102,16 +121,20 @@ export default function ProjectDetail() {
       });
 
       es.addEventListener("error", (e: any) => {
+        settled = true;
         es.close();
-        const msg = e.data ? JSON.parse(e.data)?.error : "Generation failed";
-        setGenError(msg ?? "Generation failed");
+        const raw = e.data ? JSON.parse(e.data)?.error : stageError || "Generation failed";
+        setGenError(humanizeGenError(raw || "Generation failed"));
         setGenerating(false);
         toast.error("Pipeline failed. Please try again.");
       });
 
       es.onerror = () => {
+        if (settled) return; // normal close after done/error already handled
         es.close();
-        setGenError("Connection lost during generation.");
+        setGenError(
+          stageError ? humanizeGenError(stageError) : "Connection lost during generation."
+        );
         setGenerating(false);
       };
     } catch {
