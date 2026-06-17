@@ -57,10 +57,16 @@ export default function ProjectDetail() {
 
   useEffect(() => {
     if (!id) return;
-    fetchProject(id).then((p) => {
-      setProject(p);
-      setLoading(false);
-    });
+    fetchProject(id)
+      .then((p) => {
+        setProject(p);
+        setLoading(false);
+      })
+      .catch(() => {
+        // 404 / not accessible — drop the spinner and show the
+        // "Project not found" state instead of spinning forever.
+        setLoading(false);
+      });
   }, [id]);
 
   async function handleGenerate() {
