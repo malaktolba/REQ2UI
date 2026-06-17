@@ -155,13 +155,25 @@ function ieeeSections(data: Record<string, any>): IEEESection[] {
     });
   }
 
-  // ── Appendix A: UML Diagrams ─────────────────────────────────────────────
+  // ── Appendix A: Generated UI Screens ─────────────────────────────────────
+  if (data.ui_code?.screens?.length) {
+    sections.push({ level: 1, title: "Appendix A: Generated UI Screens", lines: [] });
+    data.ui_code.screens.forEach((sc: any, i: number) => {
+      const lines: string[] = [];
+      if (sc.route) lines.push(`Route: ${sc.route}`);
+      if (sc.description) lines.push(sc.description);
+      lines.push("Generated as standalone HTML + Tailwind CSS page.");
+      sections.push({ level: 2, title: `A.${i + 1}  ${sc.id} — ${sc.name}`, lines });
+    });
+  }
+
+  // ── Appendix B: UML Diagrams ─────────────────────────────────────────────
   if (data.uml_diagrams?.diagrams?.length) {
-    sections.push({ level: 1, title: "Appendix A: UML Diagrams", lines: [] });
+    sections.push({ level: 1, title: "Appendix B: UML Diagrams", lines: [] });
     data.uml_diagrams.diagrams.forEach((d: any, i: number) => {
       sections.push({
         level: 2,
-        title: `A.${i + 1}  ${d.title}`,
+        title: `B.${i + 1}  ${d.title}`,
         lines: [
           `Type: ${d.type}`,
           d.description ? `Description: ${d.description}` : "",
@@ -171,7 +183,7 @@ function ieeeSections(data: Record<string, any>): IEEESection[] {
     });
   }
 
-  // ── Appendix B: Traceability Matrix ──────────────────────────────────────
+  // ── Appendix C: Traceability Matrix ──────────────────────────────────────
   if (data.traceability_matrix) {
     const cov = data.traceability_matrix.coverage;
     const lines: string[] = [];
@@ -183,7 +195,7 @@ function ieeeSections(data: Record<string, any>): IEEESection[] {
       lines.push(`  Security: ${(row.security_reqs ?? []).join(", ")}`);
       lines.push("");
     });
-    sections.push({ level: 1, title: "Appendix B: Traceability Matrix", lines });
+    sections.push({ level: 1, title: "Appendix C: Traceability Matrix", lines });
   }
 
   return sections;

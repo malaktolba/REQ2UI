@@ -17,6 +17,7 @@ const STAGE_NAMES = [
   "UI Wireframe Descriptions",
   "Traceability Matrix",
   "UML Diagrams",
+  "UI Code Generation",
 ];
 
 function StageIcon({ status }: { status: string }) {

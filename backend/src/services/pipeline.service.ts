@@ -20,6 +20,7 @@ const STAGE_NAMES = [
   "UI Wireframe Descriptions",
   "Traceability Matrix",
   "UML Diagrams",
+  "UI Code Generation",
 ];
 
 async function upsertStage(
@@ -332,6 +333,45 @@ Actors: ${s1.actors?.join(", ")}
 Key functional requirements:
 ${s2.requirements?.slice(0, 8).map((r: any) => `${r.id}: ${r.title}`).join("\n")}
 Main domain entities implied by requirements (infer from context).`,
+      emit
+    );
+
+    // ── Stage 10: UI Code Generation ─────────────────────────────────────────
+    const screensForCode = (s7.screens ?? []).slice(0, 8);
+    await runStage<any>(
+      projectId, 10, "ui_code",
+      `You are a senior frontend developer. Generate a complete, working HTML page for each screen using Tailwind CSS (loaded via CDN).
+
+Return a JSON object with this exact shape:
+{
+  "screens": [
+    {
+      "id": "SCR-001",
+      "name": "Screen Name",
+      "route": "/route",
+      "html": "<!DOCTYPE html><html lang=\\"en\\"><head><meta charset=\\"UTF-8\\"><meta name=\\"viewport\\" content=\\"width=device-width, initial-scale=1.0\\"><title>Screen Name</title><script src=\\"https://cdn.tailwindcss.com\\"></script></head><body class=\\"bg-gray-50 min-h-screen\\"><!-- full page content --></body></html>"
+    }
+  ]
+}
+
+Rules:
+1. Each HTML page must be fully standalone (includes Tailwind CDN script tag).
+2. Use realistic placeholder text and data — not Lorem Ipsum.
+3. Use a consistent design system: slate-900 background or white, indigo-600 as primary color, rounded-xl cards, clean typography.
+4. Include all UI elements listed in the component list (inputs, buttons, tables, navigation, etc).
+5. Make it look polished — use proper spacing, borders, hover states.
+6. Navigation links can be # hrefs. Forms do not need to submit.
+7. Each HTML value must be on ONE JSON string line — use \\n for newlines inside HTML.`,
+      `Project: ${projectName}
+System summary: ${s1.system_summary}
+
+Generate HTML for these screens:
+${screensForCode.map((sc: any) => `
+Screen: ${sc.name} (${sc.id}) — route: ${sc.route ?? ""}
+Description: ${sc.description ?? ""}
+Components: ${(sc.components ?? []).map((c: any) => `${c.type}: ${c.label} — ${c.purpose ?? ""}`).join("; ")}
+Navigation: ${(sc.navigation ?? []).join(", ")}
+`).join("\n---\n")}`,
       emit
     );
 

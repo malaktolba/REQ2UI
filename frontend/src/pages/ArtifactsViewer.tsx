@@ -17,7 +17,8 @@ const TABS = [
   { key: "security_requirements",     label: "Security Req.",     short: "SR"  },
   { key: "functional_test_cases",     label: "Func. Tests",       short: "TC"  },
   { key: "security_test_cases",       label: "Security Tests",    short: "STC" },
-  { key: "wireframes",                label: "Wireframes",        short: "UI"  },
+  { key: "wireframes",                label: "Wireframes",        short: "WF"  },
+  { key: "ui_code",                   label: "UI Code",           short: "UI"  },
   { key: "uml_diagrams",             label: "Diagrams",          short: "UML" },
   { key: "traceability_matrix",       label: "Traceability",      short: "TM"  },
 ] as const;
@@ -645,6 +646,109 @@ function DiagramsView({ data }: { data: any }) {
   );
 }
 
+// ─── UI Code View ────────────────────────────────────────────────────────────
+
+function UICodeView({ data }: { data: any }) {
+  const screens: any[] = data.screens ?? [];
+  const [selected, setSelected] = useState(screens[0]?.id ?? null);
+  const [tab, setTab] = useState<"preview" | "code">("preview");
+  const [copied, setCopied] = useState(false);
+
+  const screen = screens.find((s) => s.id === selected);
+
+  function copyCode() {
+    if (!screen?.html) return;
+    navigator.clipboard.writeText(screen.html).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  if (!screens.length) {
+    return <p className="text-slate-500 text-sm">No screens generated.</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Screen selector */}
+      <div className="flex flex-wrap gap-2">
+        {screens.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setSelected(s.id)}
+            className={[
+              "px-3 py-1.5 rounded-lg text-xs font-medium transition border",
+              selected === s.id
+                ? "bg-indigo-600 border-indigo-600 text-white"
+                : "border-slate-700 light:border-slate-300 text-slate-400 light:text-slate-600 hover:border-indigo-500 hover:text-white light:hover:text-slate-900",
+            ].join(" ")}
+          >
+            <span className="font-mono text-[10px] opacity-60 mr-1">{s.id}</span>
+            {s.name}
+          </button>
+        ))}
+      </div>
+
+      {screen && (
+        <div className="bg-slate-900 light:bg-white border border-slate-800 light:border-slate-200 rounded-2xl overflow-hidden">
+          {/* Toolbar */}
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-800 light:border-slate-200">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 bg-slate-800 light:bg-slate-100 rounded-lg p-0.5">
+                <button
+                  onClick={() => setTab("preview")}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition ${tab === "preview" ? "bg-indigo-600 text-white" : "text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900"}`}
+                >
+                  Preview
+                </button>
+                <button
+                  onClick={() => setTab("code")}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition ${tab === "code" ? "bg-indigo-600 text-white" : "text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900"}`}
+                >
+                  HTML
+                </button>
+              </div>
+              {screen.route && (
+                <span className="text-xs text-slate-500 font-mono bg-slate-800 light:bg-slate-100 px-2 py-0.5 rounded">{screen.route}</span>
+              )}
+            </div>
+            <button
+              onClick={copyCode}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 light:border-slate-300 text-slate-400 light:text-slate-600 hover:border-indigo-500 hover:text-white light:hover:text-slate-900 transition"
+            >
+              {copied ? "Copied ✓" : "Copy HTML"}
+            </button>
+          </div>
+
+          {/* Content */}
+          {tab === "preview" ? (
+            <div className="bg-white" style={{ height: 600 }}>
+              <iframe
+                srcDoc={screen.html}
+                sandbox="allow-scripts"
+                className="w-full h-full border-0"
+                title={screen.name}
+              />
+            </div>
+          ) : (
+            <div className="relative">
+              <pre className="overflow-auto p-5 text-xs text-slate-300 light:text-slate-700 font-mono leading-relaxed bg-slate-950 light:bg-slate-50"
+                style={{ maxHeight: 600 }}>
+                <code>{screen.html}</code>
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Description */}
+      {screen?.description && (
+        <p className="text-slate-500 light:text-slate-500 text-xs">{screen.description}</p>
+      )}
+    </div>
+  );
+}
+
 // ─── IEEE 830 SRS Document View ─────────────────────────────────────────────
 
 function SRSSection({ number, title, children }: { number: string; title: string; children: ReactNode }) {
@@ -897,6 +1001,7 @@ function artifactCount(key: TabKey, content: any, artifactMap?: Record<string, a
     case "functional_test_cases":       return content.test_cases?.length ?? null;
     case "security_test_cases":         return content.test_cases?.length ?? null;
     case "wireframes":                  return content.screens?.length ?? null;
+    case "ui_code":                    return content.screens?.length ?? null;
     case "uml_diagrams":               return content.diagrams?.length ?? null;
     case "traceability_matrix":         return content.matrix?.length ?? null;
     default:                            return null;
@@ -937,6 +1042,9 @@ function ArtifactSummary({ tabKey, content, artifactMap }: { tabKey: TabKey; con
         break;
       case "wireframes":
         text = `${content.screens?.length ?? 0} screens`;
+        break;
+      case "ui_code":
+        text = `${content.screens?.length ?? 0} screens with generated HTML + Tailwind CSS`;
         break;
       case "uml_diagrams":
         text = `${content.diagrams?.length ?? 0} UML diagrams (Mermaid.js)`;
@@ -986,6 +1094,7 @@ function ArtifactContent({ tabKey, content, artifactMap, projectName }: {
           case "functional_test_cases":     return <FTCView data={content} />;
           case "security_test_cases":       return <STCView data={content} />;
           case "wireframes":                return <WireframesView data={content} />;
+          case "ui_code":                  return <UICodeView data={content} />;
           case "uml_diagrams":             return <DiagramsView data={content} />;
           case "traceability_matrix":       return <TraceabilityView data={content} />;
           default:                          return <pre className="text-xs text-slate-400 overflow-auto">{JSON.stringify(content, null, 2)}</pre>;
@@ -1116,7 +1225,7 @@ export default function ArtifactsViewer() {
           <span className="text-slate-700 light:text-slate-300">/</span>
           <span className="text-slate-300 light:text-slate-700 text-sm font-medium">Artifacts</span>
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-xs text-slate-600 light:text-slate-400 mr-1">{artifacts.length} / 9</span>
+            <span className="text-xs text-slate-600 light:text-slate-400 mr-1">{artifacts.length} / 10</span>
             <ThemeToggle />
             {(["pdf", "docx", "csv", "latex"] as const).map((fmt) => (
               <button

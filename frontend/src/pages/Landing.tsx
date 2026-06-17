@@ -139,7 +139,7 @@ export default function Landing() {
           <div className="grid sm:grid-cols-3 gap-8 text-center">
             {[
               { step: "01", title: "Describe your system", body: "Write a plain-English description of the software you want to build." },
-              { step: "02", title: "AI runs 9 stages", body: "The pipeline extracts, structures, and cross-references every artifact automatically." },
+              { step: "02", title: "AI runs 10 stages", body: "The pipeline extracts, structures, and cross-references every artifact — including live UI code — automatically." },
               { step: "03", title: "Download & submit", body: "Export as PDF, DOCX, LaTeX, or CSV — IEEE 830 formatted and ready to hand in." },
             ].map((s) => (
               <div key={s.step} className="flex flex-col items-center">
