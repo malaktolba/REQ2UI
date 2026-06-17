@@ -386,24 +386,31 @@ export function generateLaTeX(projectName: string, artifacts: any[]): string {
     const cmd = level === 1 ? "\\section*" : level === 2 ? "\\subsection*" : "\\subsubsection*";
     lines.push(`${cmd}{${latexEsc(title)}}`);
 
-    for (const line of bodyLines) {
+    let bi = 0;
+    while (bi < bodyLines.length) {
+      const line = bodyLines[bi];
       if (line.trim() === "") {
         lines.push("");
+        bi++;
         continue;
       }
       if (line.startsWith("  →") || line.startsWith("  ✓")) {
-        // Start a bullet list for consecutive control/criteria lines
         lines.push("\\begin{itemize}[leftmargin=1.5em]");
-        lines.push(`  \\item ${latexEsc(line.trim().replace(/^[→✓]\s*/, ""))}`);
-        // peek ahead — handled by flushing below
+        while (bi < bodyLines.length && (bodyLines[bi].startsWith("  →") || bodyLines[bi].startsWith("  ✓"))) {
+          lines.push(`  \\item ${latexEsc(bodyLines[bi].trim().replace(/^[→✓]\s*/, ""))}`);
+          bi++;
+        }
         lines.push("\\end{itemize}");
       } else if (line.match(/^\s+\d+\.\s/)) {
-        // Numbered step
         lines.push("\\begin{enumerate}[leftmargin=1.5em]");
-        lines.push(`  \\item ${latexEsc(line.trim().replace(/^\d+\.\s*/, ""))}`);
+        while (bi < bodyLines.length && bodyLines[bi].match(/^\s+\d+\.\s/)) {
+          lines.push(`  \\item ${latexEsc(bodyLines[bi].trim().replace(/^\d+\.\s*/, ""))}`);
+          bi++;
+        }
         lines.push("\\end{enumerate}");
       } else {
         lines.push(latexEsc(line));
+        bi++;
       }
     }
     lines.push("");
