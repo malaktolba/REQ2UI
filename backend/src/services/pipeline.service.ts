@@ -1,5 +1,5 @@
 import { sql } from "../db/client";
-import { callGroq } from "./groq.service";
+import { callGroq, callGroqText } from "./groq.service";
 
 export interface StageEvent {
   stage: number;
@@ -77,6 +77,141 @@ async function runStage<T>(
     const msg = err?.message ?? "Unknown error";
     await upsertStage(projectId, stageNum, "failed", msg);
     emit({ stage: stageNum, name, status: "failed", error: msg });
+    throw err;
+  }
+}
+
+async function generateUICodeMultipass(
+  projectId: string,
+  projectName: string,
+  s1: any,
+  s2: any,
+  s7: any,
+  emit: Emit
+): Promise<void> {
+  const stageName = STAGE_NAMES[9];
+  emit({ stage: 10, name: stageName, status: "running" });
+  await upsertStage(projectId, 10, "running");
+
+  try {
+    const screens = (s7.screens ?? []).slice(0, 8);
+    const routeMap = screens
+      .map((sc: any) => `${sc.name}: ${sc.route ?? "/" + sc.id.toLowerCase()}`)
+      .join(" | ");
+
+    // ── Pass 1: Design system ─────────────────────────────────────────────
+    const designSystem = await callGroq(
+      `You are a senior UI designer. Create a cohesive HTML design system for a web app.
+Return a JSON object with exactly this shape:
+{
+  "navbar": "<full navbar HTML using Tailwind classes>",
+  "footer": "<footer HTML using Tailwind classes>",
+  "tailwind_config": "<script>tailwind.config={theme:{extend:{colors:{primary:{'50':'#eef2ff','100':'#e0e7ff','500':'#6366f1','600':'#4f46e5','700':'#4338ca'}}}}}</script>",
+  "body_classes": "bg-slate-950 text-slate-100 min-h-screen flex flex-col"
+}
+
+Design rules:
+- Dark theme: bg-slate-950 page, bg-slate-900 surfaces, slate-800 borders, indigo-600 primary
+- Navbar: fixed top, logo left, navigation links center/right, user avatar right
+- Navigation links must include ALL these screens: ${routeMap}
+- Footer: simple 1-line with project name and copyright
+- Use real, project-appropriate link text (not placeholders)`,
+      `Project: ${projectName}\nSystem: ${s1.system_summary}`
+    );
+
+    // ── Pass 2: Per-screen HTML generation (batches of 3) ─────────────────
+    const frByScreen: Record<string, string[]> = {};
+    for (const sc of screens) {
+      const relevant = (s2.requirements ?? [])
+        .filter((r: any) =>
+          sc.components?.some((c: any) =>
+            r.title?.toLowerCase().split(" ").some((w: string) =>
+              c.label?.toLowerCase().includes(w) || c.purpose?.toLowerCase().includes(w)
+            )
+          )
+        )
+        .slice(0, 4)
+        .map((r: any) => `${r.id}: ${r.title} — ${r.description}`);
+      frByScreen[sc.id] = relevant;
+    }
+
+    const generatedScreens: any[] = [];
+    const BATCH = 3;
+    for (let i = 0; i < screens.length; i += BATCH) {
+      const batch = screens.slice(i, i + BATCH);
+      const batchResults = await Promise.all(
+        batch.map(async (sc: any) => {
+          const components = (sc.components ?? [])
+            .map((c: any) => `- ${c.type}: "${c.label}"${c.purpose ? ` (${c.purpose})` : ""}`)
+            .join("\n");
+          const frs = frByScreen[sc.id]?.join("\n") ?? "";
+
+          const html = await callGroqText(
+            `You are an expert frontend developer. Generate a COMPLETE, polished, production-quality HTML page.
+
+DESIGN SYSTEM (use exactly as provided):
+${designSystem.navbar ? `Navbar:\n${designSystem.navbar}` : ""}
+${designSystem.footer ? `Footer:\n${designSystem.footer}` : ""}
+${designSystem.tailwind_config ?? ""}
+Body classes: ${designSystem.body_classes ?? "bg-slate-950 text-slate-100 min-h-screen flex flex-col"}
+
+NAVIGATION ROUTES (use as href values):
+${routeMap}
+
+CODING RULES:
+1. Output ONLY the complete HTML document — no markdown, no explanation, no code fences
+2. <head> must include: Tailwind CDN script, the provided tailwind_config script, any <style> blocks
+3. <body> must start with the navbar HTML, end with the footer HTML, main content between them
+4. Use realistic, domain-appropriate data (names, numbers, dates) — NOT Lorem Ipsum
+5. Every UI component listed must be visually present on the page
+6. Forms: include proper labels, placeholders, validation attributes; no real submission needed
+7. Tables: use realistic sample rows (3–5 rows minimum)
+8. Mobile-responsive: use Tailwind responsive prefixes (sm:, md:, lg:)
+9. Hover/focus states on interactive elements
+10. Include at least one piece of JavaScript for a small interaction (e.g., dropdown, modal toggle, tab switch)`,
+            `Screen: ${sc.name}
+Route: ${sc.route ?? ""}
+Description: ${sc.description ?? ""}
+
+Required components:
+${components}
+
+Related functional requirements:
+${frs || "— (use general context)"}
+
+Project: ${projectName}
+Actors: ${s1.actors?.join(", ")}
+System: ${s1.system_summary}`
+          );
+
+          return {
+            id: sc.id,
+            name: sc.name,
+            route: sc.route ?? "",
+            description: sc.description ?? "",
+            html,
+          };
+        })
+      );
+      generatedScreens.push(...batchResults);
+    }
+
+    const result = {
+      design_system: {
+        navbar: designSystem.navbar,
+        footer: designSystem.footer,
+        body_classes: designSystem.body_classes,
+      },
+      screens: generatedScreens,
+    };
+
+    await upsertArtifact(projectId, "ui_code", result);
+    await upsertStage(projectId, 10, "completed");
+    emit({ stage: 10, name: stageName, status: "completed" });
+  } catch (err: any) {
+    const msg = err?.message ?? "Unknown error";
+    await upsertStage(projectId, 10, "failed", msg);
+    emit({ stage: 10, name: stageName, status: "failed", error: msg });
     throw err;
   }
 }
@@ -336,44 +471,8 @@ Main domain entities implied by requirements (infer from context).`,
       emit
     );
 
-    // ── Stage 10: UI Code Generation ─────────────────────────────────────────
-    const screensForCode = (s7.screens ?? []).slice(0, 8);
-    await runStage<any>(
-      projectId, 10, "ui_code",
-      `You are a senior frontend developer. Generate a complete, working HTML page for each screen using Tailwind CSS (loaded via CDN).
-
-Return a JSON object with this exact shape:
-{
-  "screens": [
-    {
-      "id": "SCR-001",
-      "name": "Screen Name",
-      "route": "/route",
-      "html": "<!DOCTYPE html><html lang=\\"en\\"><head><meta charset=\\"UTF-8\\"><meta name=\\"viewport\\" content=\\"width=device-width, initial-scale=1.0\\"><title>Screen Name</title><script src=\\"https://cdn.tailwindcss.com\\"></script></head><body class=\\"bg-gray-50 min-h-screen\\"><!-- full page content --></body></html>"
-    }
-  ]
-}
-
-Rules:
-1. Each HTML page must be fully standalone (includes Tailwind CDN script tag).
-2. Use realistic placeholder text and data — not Lorem Ipsum.
-3. Use a consistent design system: slate-900 background or white, indigo-600 as primary color, rounded-xl cards, clean typography.
-4. Include all UI elements listed in the component list (inputs, buttons, tables, navigation, etc).
-5. Make it look polished — use proper spacing, borders, hover states.
-6. Navigation links can be # hrefs. Forms do not need to submit.
-7. Each HTML value must be on ONE JSON string line — use \\n for newlines inside HTML.`,
-      `Project: ${projectName}
-System summary: ${s1.system_summary}
-
-Generate HTML for these screens:
-${screensForCode.map((sc: any) => `
-Screen: ${sc.name} (${sc.id}) — route: ${sc.route ?? ""}
-Description: ${sc.description ?? ""}
-Components: ${(sc.components ?? []).map((c: any) => `${c.type}: ${c.label} — ${c.purpose ?? ""}`).join("; ")}
-Navigation: ${(sc.navigation ?? []).join(", ")}
-`).join("\n---\n")}`,
-      emit
-    );
+    // ── Stage 10: UI Code Generation (multipass) ─────────────────────────────
+    await generateUICodeMultipass(projectId, projectName, s1, s2, s7, emit);
 
     await sql`UPDATE projects SET status = 'completed', updated_at = NOW() WHERE id = ${projectId}`;
   } catch {

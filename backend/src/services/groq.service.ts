@@ -33,3 +33,35 @@ export async function callGroq(
   }
   throw lastError;
 }
+
+/** Like callGroq but returns raw text — used when the model output is not JSON (e.g. HTML). */
+export async function callGroqText(
+  systemPrompt: string,
+  userPrompt: string,
+  retries = 3
+): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const completion = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.4,
+        max_tokens: 8000,
+      });
+      const raw = completion.choices[0].message.content;
+      if (!raw) throw new Error("Empty response from Groq");
+      // Strip markdown code fences if present
+      return raw.replace(/^```(?:html)?\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1500));
+      }
+    }
+  }
+  throw lastError as any;
+}

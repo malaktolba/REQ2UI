@@ -648,10 +648,23 @@ function DiagramsView({ data }: { data: any }) {
 
 // ─── UI Code View ────────────────────────────────────────────────────────────
 
+type Viewport = "desktop" | "tablet" | "mobile";
+const VIEWPORT_WIDTH: Record<Viewport, number | string> = {
+  desktop: "100%",
+  tablet: 768,
+  mobile: 390,
+};
+const VIEWPORT_ICONS: Record<Viewport, string> = {
+  desktop: "⊞",
+  tablet: "▭",
+  mobile: "▯",
+};
+
 function UICodeView({ data }: { data: any }) {
   const screens: any[] = data.screens ?? [];
   const [selected, setSelected] = useState(screens[0]?.id ?? null);
   const [tab, setTab] = useState<"preview" | "code">("preview");
+  const [viewport, setViewport] = useState<Viewport>("desktop");
   const [copied, setCopied] = useState(false);
 
   const screen = screens.find((s) => s.id === selected);
@@ -664,9 +677,31 @@ function UICodeView({ data }: { data: any }) {
     });
   }
 
+  function downloadHTML() {
+    if (!screen?.html) return;
+    const blob = new Blob([screen.html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${screen.id ?? screen.name}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function openInNewTab() {
+    if (!screen?.html) return;
+    const blob = new Blob([screen.html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    // revoke after a short delay so the browser has time to load it
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
   if (!screens.length) {
     return <p className="text-slate-500 text-sm">No screens generated.</p>;
   }
+
+  const iframeWidth = VIEWPORT_WIDTH[viewport];
 
   return (
     <div className="space-y-4">
@@ -692,59 +727,88 @@ function UICodeView({ data }: { data: any }) {
       {screen && (
         <div className="bg-slate-900 light:bg-white border border-slate-800 light:border-slate-200 rounded-2xl overflow-hidden">
           {/* Toolbar */}
-          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-800 light:border-slate-200">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1 bg-slate-800 light:bg-slate-100 rounded-lg p-0.5">
-                <button
-                  onClick={() => setTab("preview")}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition ${tab === "preview" ? "bg-indigo-600 text-white" : "text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900"}`}
-                >
-                  Preview
-                </button>
-                <button
-                  onClick={() => setTab("code")}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition ${tab === "code" ? "bg-indigo-600 text-white" : "text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900"}`}
-                >
-                  HTML
-                </button>
+          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800 light:border-slate-200 flex-wrap gap-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Preview / Code toggle */}
+              <div className="flex items-center gap-0.5 bg-slate-800 light:bg-slate-100 rounded-lg p-0.5">
+                {(["preview", "code"] as const).map((t) => (
+                  <button key={t} onClick={() => setTab(t)}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition capitalize ${tab === t ? "bg-indigo-600 text-white" : "text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900"}`}>
+                    {t === "preview" ? "Preview" : "HTML"}
+                  </button>
+                ))}
               </div>
+
+              {/* Viewport size toggle (preview only) */}
+              {tab === "preview" && (
+                <div className="flex items-center gap-0.5 bg-slate-800 light:bg-slate-100 rounded-lg p-0.5">
+                  {(["desktop", "tablet", "mobile"] as const).map((v) => (
+                    <button key={v} onClick={() => setViewport(v)} title={v}
+                      className={`px-2.5 py-1 rounded-md text-xs transition ${viewport === v ? "bg-slate-600 light:bg-slate-300 text-white light:text-slate-800" : "text-slate-500 hover:text-slate-300 light:hover:text-slate-700"}`}>
+                      {VIEWPORT_ICONS[v]}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {screen.route && (
                 <span className="text-xs text-slate-500 font-mono bg-slate-800 light:bg-slate-100 px-2 py-0.5 rounded">{screen.route}</span>
               )}
             </div>
-            <button
-              onClick={copyCode}
-              className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 light:border-slate-300 text-slate-400 light:text-slate-600 hover:border-indigo-500 hover:text-white light:hover:text-slate-900 transition"
-            >
-              {copied ? "Copied ✓" : "Copy HTML"}
-            </button>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-1.5">
+              <button onClick={openInNewTab}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 light:border-slate-300 text-slate-400 light:text-slate-600 hover:border-indigo-500 hover:text-white light:hover:text-slate-900 transition">
+                ↗ Open
+              </button>
+              <button onClick={downloadHTML}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 light:border-slate-300 text-slate-400 light:text-slate-600 hover:border-indigo-500 hover:text-white light:hover:text-slate-900 transition">
+                ↓ .html
+              </button>
+              <button onClick={copyCode}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 light:border-slate-300 text-slate-400 light:text-slate-600 hover:border-indigo-500 hover:text-white light:hover:text-slate-900 transition">
+                {copied ? "✓ Copied" : "Copy"}
+              </button>
+            </div>
           </div>
 
           {/* Content */}
           {tab === "preview" ? (
-            <div className="bg-white" style={{ height: 600 }}>
+            <div className="bg-slate-200 light:bg-slate-100 flex justify-center overflow-auto" style={{ minHeight: 600, padding: viewport !== "desktop" ? "20px 0" : 0 }}>
               <iframe
+                key={`${screen.id}-${viewport}`}
                 srcDoc={screen.html}
-                sandbox="allow-scripts"
-                className="w-full h-full border-0"
+                sandbox="allow-scripts allow-same-origin"
                 title={screen.name}
+                style={{
+                  width: iframeWidth,
+                  height: 600,
+                  border: 0,
+                  flexShrink: 0,
+                  boxShadow: viewport !== "desktop" ? "0 4px 32px rgba(0,0,0,0.3)" : "none",
+                  borderRadius: viewport === "mobile" ? 12 : viewport === "tablet" ? 4 : 0,
+                }}
               />
             </div>
           ) : (
-            <div className="relative">
-              <pre className="overflow-auto p-5 text-xs text-slate-300 light:text-slate-700 font-mono leading-relaxed bg-slate-950 light:bg-slate-50"
-                style={{ maxHeight: 600 }}>
-                <code>{screen.html}</code>
-              </pre>
-            </div>
+            <pre className="overflow-auto p-5 text-xs text-slate-300 light:text-slate-700 font-mono leading-relaxed bg-slate-950 light:bg-slate-50 tab-size-2"
+              style={{ maxHeight: 600 }}>
+              <code>{screen.html}</code>
+            </pre>
           )}
         </div>
       )}
 
-      {/* Description */}
-      {screen?.description && (
-        <p className="text-slate-500 light:text-slate-500 text-xs">{screen.description}</p>
-      )}
+      {/* Description + design system info */}
+      <div className="flex items-start gap-4 text-xs text-slate-500 flex-wrap">
+        {screen?.description && <span className="flex-1">{screen.description}</span>}
+        {data.design_system && (
+          <span className="flex-shrink-0 bg-slate-900 light:bg-slate-50 border border-slate-800 light:border-slate-200 rounded-lg px-3 py-1.5">
+            Shared design system applied · {screens.length} screens
+          </span>
+        )}
+      </div>
     </div>
   );
 }
