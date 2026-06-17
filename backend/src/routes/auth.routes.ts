@@ -23,10 +23,14 @@ const authLimiter = rateLimit({
   message: { error: "Too many attempts, please try again later." },
 });
 
+const isProd = process.env.NODE_ENV === "production";
 const COOKIE_OPTS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "strict" as const,
+  // In production the frontend (Vercel) and backend (Render) are on
+  // different sites, so the cookie must be SameSite=None (which requires
+  // Secure). In dev they share localhost, so Lax/strict-style is fine.
+  secure: isProd,
+  sameSite: (isProd ? "none" : "lax") as "none" | "lax",
   maxAge: 7 * 24 * 60 * 60 * 1000,
   path: "/api/auth",
 };
@@ -136,7 +140,7 @@ router.post("/refresh", async (req: Request, res: Response): Promise<void> => {
 
   const result = await rotateRefreshToken(raw);
   if (!result) {
-    res.clearCookie("refresh_token", { path: "/api/auth" });
+    res.clearCookie("refresh_token", { path: "/api/auth", secure: isProd, sameSite: (isProd ? "none" : "lax") as "none" | "lax" });
     res.status(401).json({ error: "Refresh token invalid or expired" });
     return;
   }
@@ -161,7 +165,7 @@ router.post("/refresh", async (req: Request, res: Response): Promise<void> => {
 router.post("/logout", async (req: Request, res: Response): Promise<void> => {
   const raw = req.cookies?.refresh_token;
   if (raw) await revokeRefreshToken(raw);
-  res.clearCookie("refresh_token", { path: "/api/auth" });
+  res.clearCookie("refresh_token", { path: "/api/auth", secure: isProd, sameSite: (isProd ? "none" : "lax") as "none" | "lax" });
   res.json({ message: "Logged out" });
 });
 
