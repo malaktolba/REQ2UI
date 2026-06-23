@@ -33,6 +33,16 @@ app.use("/api/projects", exportRoutes);
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 
+// A transient Neon "fetch failed" inside an async route handler surfaces as an
+// unhandled rejection, which by default crashes the whole process. Log it and
+// keep serving so a momentary database blip downs one request, not the server.
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[uncaughtException]", err);
+});
+
 app.listen(env.PORT, () => {
   console.log(`Backend running on port ${env.PORT}`);
 });

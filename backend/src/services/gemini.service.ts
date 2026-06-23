@@ -29,13 +29,20 @@ function throttle(): Promise<void> {
   return run;
 }
 
-/** Pulls the server-suggested retry delay (seconds) out of a 429 error, if present. */
-function retryDelayMs(err: unknown): number | null {
+/** Backoff (ms) for a retryable Gemini error, or null if it's not retryable. */
+function retryDelayMs(err: unknown, attempt: number): number | null {
   const msg = typeof err === "string" ? err : (err as any)?.message ?? JSON.stringify(err ?? "");
-  if (!/429|RESOURCE_EXHAUSTED/i.test(msg)) return null;
-  const m = msg.match(/retry(?:Delay)?["']?\s*[:=]?\s*["']?\s*(?:in\s*)?([\d.]+)\s*s/i);
-  const secs = m ? parseFloat(m[1]) : 30; // default if unparseable but clearly a 429
-  return Math.min(secs + 1, 60) * 1000; // honor it, capped at 60s
+  // 503 capacity spikes ("high demand"/overloaded) are transient but can last
+  // 20–30s, longer than a plain exponential backoff — wait a growing few seconds.
+  if (/503|UNAVAILABLE|high demand|overloaded/i.test(msg)) {
+    return Math.min(4000 + attempt * 4000, 20000);
+  }
+  if (/429|RESOURCE_EXHAUSTED/i.test(msg)) {
+    const m = msg.match(/retry(?:Delay)?["']?\s*[:=]?\s*["']?\s*(?:in\s*)?([\d.]+)\s*s/i);
+    const secs = m ? parseFloat(m[1]) : 30; // default if unparseable but clearly a 429
+    return Math.min(secs + 1, 60) * 1000; // honor it, capped at 60s
+  }
+  return null;
 }
 
 async function generate(
@@ -71,8 +78,8 @@ async function generate(
     } catch (err) {
       lastError = err;
       if (attempt < retries) {
-        // Respect the server's backoff on rate limits; otherwise exponential.
-        const wait = retryDelayMs(err) ?? Math.pow(2, attempt) * 1500;
+        // Respect the server's backoff on rate limits / 503s; else exponential.
+        const wait = retryDelayMs(err, attempt) ?? Math.pow(2, attempt) * 1500;
         await new Promise((r) => setTimeout(r, wait));
       }
     }
@@ -85,7 +92,7 @@ export async function callGeminiJSON(
   systemPrompt: string,
   userPrompt: string,
   maxTokens = 8000,
-  retries = 3
+  retries = 5
 ): Promise<any> {
   const raw = await generate(systemPrompt, userPrompt, maxTokens, 0.3, true, retries);
   return JSON.parse(raw);
@@ -96,7 +103,7 @@ export async function callGeminiText(
   systemPrompt: string,
   userPrompt: string,
   maxTokens = 8000,
-  retries = 3
+  retries = 5
 ): Promise<string> {
   const raw = await generate(systemPrompt, userPrompt, maxTokens, 0.4, false, retries);
   // Strip markdown code fences if present

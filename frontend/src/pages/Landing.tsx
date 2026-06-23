@@ -71,6 +71,10 @@ export default function Landing() {
             AI-Powered Requirements Engineering
           </div>
 
+          <div className="text-6xl sm:text-7xl lg:text-8xl font-extrabold tracking-tight mb-5">
+            Req<span className="text-indigo-400">2</span>UI
+          </div>
+
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold leading-tight max-w-3xl mb-6">
             Turn ideas into
             <span className="block text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
