@@ -275,7 +275,7 @@ export default function ProjectDetail() {
               {generating ? "Generating…" : project.status === "completed" ? "Re-generate" : "Generate artifacts"}
             </button>
 
-            {project.status === "completed" && (
+            {(project.status === "completed" || stages.some((s) => s.status === "completed")) && (
               <button
                 onClick={() => navigate(`/projects/${id}/artifacts`)}
                 className="border border-slate-700 light:border-slate-300 hover:border-indigo-500/60 light:hover:border-indigo-400 text-slate-300 light:text-slate-600 hover:text-white light:hover:text-slate-900 font-medium px-5 py-2.5 rounded-xl transition text-sm flex items-center gap-1.5"

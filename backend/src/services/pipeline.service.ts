@@ -1,5 +1,6 @@
 import { sql } from "../db/client";
-import { callGroq, callGroqText } from "./groq.service";
+import { callGroq } from "./groq.service";
+import { callGeminiJSON, callGeminiText } from "./gemini.service";
 
 export interface StageEvent {
   stage: number;
@@ -21,6 +22,21 @@ const STAGE_NAMES = [
   "Traceability Matrix",
   "UML Diagrams",
   "UI Code Generation",
+];
+
+// Per-stage output ceilings (max_tokens), indexed by stage number - 1.
+// Lighter structured stages get tighter caps for runaway protection; the
+// content-heavy stages (functional reqs, test cases, wireframes) keep headroom.
+const STAGE_MAX_TOKENS = [
+  3000, // 1  Requirement Extraction
+  6000, // 2  Functional Requirements
+  3000, // 3  Non-Functional Requirements
+  4000, // 4  Security Requirements
+  8000, // 5  Functional Test Cases (2+ per FR — largest JSON stage)
+  4000, // 6  Security Test Cases
+  6000, // 7  UI Wireframe Descriptions
+  4000, // 8  Traceability Matrix
+  4000, // 9  UML Diagrams
 ];
 
 async function upsertStage(
@@ -61,14 +77,16 @@ async function runStage<T>(
   artifactType: string,
   system: string,
   user: string,
-  emit: Emit
+  emit: Emit,
+  maxTokens?: number
 ): Promise<T> {
   const name = STAGE_NAMES[stageNum - 1];
+  const cap = maxTokens ?? STAGE_MAX_TOKENS[stageNum - 1] ?? 8000;
   emit({ stage: stageNum, name, status: "running" });
   await upsertStage(projectId, stageNum, "running");
 
   try {
-    const result = await callGroq(system, user);
+    const result = await callGroq(system, user, cap);
     await upsertArtifact(projectId, artifactType, result);
     await upsertStage(projectId, stageNum, "completed");
     emit({ stage: stageNum, name, status: "completed" });
@@ -79,6 +97,45 @@ async function runStage<T>(
     emit({ stage: stageNum, name, status: "failed", error: msg });
     throw err;
   }
+}
+
+// Coarse category for a wireframe screen, used to avoid spending UI-generation
+// slots on near-duplicate pages (e.g. Login vs Register both render the same way).
+function screenCategory(sc: any): string {
+  const hay = `${sc.name ?? ""} ${sc.route ?? ""} ${sc.description ?? ""}`.toLowerCase();
+  const rules: [string, RegExp][] = [
+    ["auth", /\b(log[\s-]?in|sign[\s-]?in|sign[\s-]?up|register|registration|forgot|reset|password|authenticate)\b/],
+    ["dashboard", /\b(dashboard|overview|analytics|summary|home page|homepage)\b/],
+    ["settings", /\b(settings|preferences|configuration)\b/],
+    ["profile", /\b(profile|my account|account page)\b/],
+    ["create", /\b(create|add new|new |compose|edit|update form|\bform\b)\b/],
+    ["list", /\b(list|manage|browse|catalog|inbox|all [a-z]+s\b)\b/],
+    ["report", /\b(report|statistics|metrics|insights)\b/],
+  ];
+  for (const [cat, re] of rules) if (re.test(hay)) return cat;
+  return `__${sc.id ?? sc.name}`; // uncategorized → treated as distinct
+}
+
+/** Picks up to `limit` functionally distinct screens, then backfills to reach `limit`. */
+function selectDistinctScreens(screens: any[], limit: number): any[] {
+  const seen = new Set<string>();
+  const picked: any[] = [];
+  const leftovers: any[] = [];
+  for (const sc of screens) {
+    const cat = screenCategory(sc);
+    if (seen.has(cat)) {
+      leftovers.push(sc);
+    } else {
+      seen.add(cat);
+      picked.push(sc);
+      if (picked.length === limit) return picked;
+    }
+  }
+  for (const sc of leftovers) {
+    if (picked.length === limit) break;
+    picked.push(sc);
+  }
+  return picked.slice(0, limit);
 }
 
 async function generateUICodeMultipass(
@@ -94,13 +151,13 @@ async function generateUICodeMultipass(
   await upsertStage(projectId, 10, "running");
 
   try {
-    const screens = (s7.screens ?? []).slice(0, 8);
+    const screens = selectDistinctScreens(s7.screens ?? [], 4);
     const routeMap = screens
       .map((sc: any) => `${sc.name}: ${sc.route ?? "/" + sc.id.toLowerCase()}`)
       .join(" | ");
 
     // ── Pass 1: Design system ─────────────────────────────────────────────
-    const designSystem = await callGroq(
+    const designSystem = await callGeminiJSON(
       `You are a senior UI designer. Create a cohesive HTML design system for a web app.
 Return a JSON object with exactly this shape:
 {
@@ -116,7 +173,8 @@ Design rules:
 - Navigation links must include ALL these screens: ${routeMap}
 - Footer: simple 1-line with project name and copyright
 - Use real, project-appropriate link text (not placeholders)`,
-      `Project: ${projectName}\nSystem: ${s1.system_summary}`
+      `Project: ${projectName}\nSystem: ${s1.system_summary}`,
+      8000
     );
 
     // ── Pass 2: Per-screen HTML generation (batches of 3) ─────────────────
@@ -146,7 +204,7 @@ Design rules:
             .join("\n");
           const frs = frByScreen[sc.id]?.join("\n") ?? "";
 
-          const html = await callGroqText(
+          const html = await callGeminiText(
             `You are an expert frontend developer. Generate a COMPLETE, polished, production-quality HTML page.
 
 DESIGN SYSTEM (use exactly as provided):

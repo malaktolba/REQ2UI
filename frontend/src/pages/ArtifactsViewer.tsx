@@ -661,6 +661,21 @@ const VIEWPORT_ICONS: Record<Viewport, string> = {
   mobile: "▯",
 };
 
+// In the preview iframe, the page's relative links (e.g. href="/tasks") resolve
+// against our app's origin and would navigate the frame into our SPA. Inject a
+// guard that neutralizes link navigation and form submits for the preview only,
+// while leaving in-page (#) anchors and JS interactions (modals, tabs) working.
+function previewDoc(html: string): string {
+  const guard = `<script>(function(){
+    document.addEventListener('click',function(e){
+      var a=e.target&&e.target.closest&&e.target.closest('a');
+      if(a){var h=a.getAttribute('href')||'';if(h.charAt(0)!=='#'){e.preventDefault();}}
+    },true);
+    document.addEventListener('submit',function(e){e.preventDefault();},true);
+  })();<\/script>`;
+  return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, guard + "</body>") : html + guard;
+}
+
 function UICodeView({ data }: { data: any }) {
   const screens: any[] = data.screens ?? [];
   const [selected, setSelected] = useState(screens[0]?.id ?? null);
@@ -776,21 +791,47 @@ function UICodeView({ data }: { data: any }) {
 
           {/* Content */}
           {tab === "preview" ? (
-            <div className="bg-slate-200 light:bg-slate-100 flex justify-center overflow-auto" style={{ minHeight: 600, padding: viewport !== "desktop" ? "20px 0" : 0 }}>
-              <iframe
-                key={`${screen.id}-${viewport}`}
-                srcDoc={screen.html}
-                sandbox="allow-scripts allow-same-origin"
-                title={screen.name}
-                style={{
-                  width: iframeWidth,
-                  height: 600,
-                  border: 0,
-                  flexShrink: 0,
-                  boxShadow: viewport !== "desktop" ? "0 4px 32px rgba(0,0,0,0.3)" : "none",
-                  borderRadius: viewport === "mobile" ? 12 : viewport === "tablet" ? 4 : 0,
-                }}
-              />
+            <div className="bg-slate-200 light:bg-slate-100 flex justify-center overflow-auto" style={{ minHeight: 600, padding: 20 }}>
+              {/* Browser-window frame around the generated screen */}
+              <div
+                className="flex flex-col rounded-xl overflow-hidden bg-white flex-shrink-0 border border-slate-300/70"
+                style={{ width: iframeWidth, maxWidth: "100%", boxShadow: "0 8px 40px rgba(0,0,0,0.35)" }}
+              >
+                {/* Window chrome: traffic lights + address bar */}
+                <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 border-b border-slate-200">
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <span className="w-3 h-3 rounded-full bg-red-400" />
+                    <span className="w-3 h-3 rounded-full bg-yellow-400" />
+                    <span className="w-3 h-3 rounded-full bg-green-400" />
+                  </div>
+                  <div className="flex-1 min-w-0 mx-1">
+                    <div className="bg-white border border-slate-200 rounded-md px-3 py-1 text-[11px] text-slate-500 font-mono truncate text-center">
+                      {screen.route ? `localhost${screen.route}` : screen.name}
+                    </div>
+                  </div>
+                </div>
+                <iframe
+                  key={`${screen.id}-${viewport}`}
+                  srcDoc={previewDoc(screen.html)}
+                  sandbox="allow-scripts allow-same-origin"
+                  title={screen.name}
+                  onLoad={(e) => {
+                    // Catch-all for programmatic navigation (e.g. window.location.href
+                    // in the page's JS): if the frame loaded our app's origin, restore
+                    // the preview instead of letting it route into our SPA.
+                    const f = e.currentTarget;
+                    try {
+                      const href = f.contentWindow?.location?.href ?? "";
+                      if (href.startsWith(window.location.origin)) {
+                        f.srcdoc = previewDoc(screen.html);
+                      }
+                    } catch {
+                      /* cross-origin after nav → not our app, ignore */
+                    }
+                  }}
+                  style={{ width: "100%", height: 600, border: 0, display: "block" }}
+                />
+              </div>
             </div>
           ) : (
             <pre className="overflow-auto p-5 text-xs text-slate-300 light:text-slate-700 font-mono leading-relaxed bg-slate-950 light:bg-slate-50 tab-size-2"
@@ -1351,7 +1392,14 @@ export default function ArtifactsViewer() {
         {/* Tab bar */}
         <div className="flex gap-1 overflow-x-auto pb-4 mb-8 scrollbar-none border-b border-slate-800 light:border-slate-200">
           {TABS.map((tab) => {
-            const available = tab.key === "srs_document" ? srsReady : availableKeys.has(tab.key);
+            const available =
+              tab.key === "srs_document"
+                ? srsReady
+                : tab.key === "ui_code"
+                // Enable once wireframes exist so the tab can be opened to
+                // generate UI code, even before any ui_code artifact exists.
+                ? availableKeys.has("ui_code") || availableKeys.has("wireframes")
+                : availableKeys.has(tab.key);
             const active = activeTab === tab.key;
             return (
               <button
@@ -1398,6 +1446,25 @@ export default function ArtifactsViewer() {
                 className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-2.5 rounded-xl transition text-sm shadow-lg shadow-indigo-900/30"
               >
                 Generate UI Code
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Regenerate control (when UI code already exists — re-runs Stage 10 only) */}
+        {activeTab === "ui_code" && availableKeys.has("ui_code") && (
+          <div className="flex justify-end mb-3">
+            {generatingUI ? (
+              <div className="flex items-center gap-2 text-sm text-indigo-400">
+                <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                {uiGenStage || "Regenerating…"}
+              </div>
+            ) : (
+              <button
+                onClick={handleGenerateUI}
+                className="border border-slate-700 hover:border-indigo-500/60 text-slate-300 hover:text-white font-medium px-4 py-2 rounded-lg transition text-sm flex items-center gap-1.5"
+              >
+                ↻ Regenerate UI Code
               </button>
             )}
           </div>

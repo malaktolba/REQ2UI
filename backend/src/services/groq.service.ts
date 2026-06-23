@@ -6,6 +6,7 @@ const groq = new Groq({ apiKey: env.GROQ_API_KEY });
 export async function callGroq(
   systemPrompt: string,
   userPrompt: string,
+  maxTokens = 8000,
   retries = 3
 ): Promise<any> {
   let lastError: unknown;
@@ -19,7 +20,7 @@ export async function callGroq(
         ],
         response_format: { type: "json_object" },
         temperature: 0.3,
-        max_tokens: 8000,
+        max_tokens: maxTokens,
       });
       const raw = completion.choices[0].message.content;
       if (!raw) throw new Error("Empty response from Groq");
@@ -38,6 +39,7 @@ export async function callGroq(
 export async function callGroqText(
   systemPrompt: string,
   userPrompt: string,
+  maxTokens = 8000,
   retries = 3
 ): Promise<string> {
   let lastError: unknown;
@@ -50,7 +52,7 @@ export async function callGroqText(
           { role: "user", content: userPrompt },
         ],
         temperature: 0.4,
-        max_tokens: 8000,
+        max_tokens: maxTokens,
       });
       const raw = completion.choices[0].message.content;
       if (!raw) throw new Error("Empty response from Groq");

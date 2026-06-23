@@ -34,7 +34,7 @@ Artifacts are viewable in an IEEE 830-structured SRS document tab and individual
 | Backend | Node.js 22, Express, TypeScript |
 | Database | PostgreSQL (Neon serverless) |
 | Auth | JWT (15 min access) + Refresh tokens + httpOnly cookies |
-| AI | Groq API — llama-3.3-70b-versatile |
+| AI | Groq API — llama-3.3-70b-versatile (requirements/analysis) · Gemini 2.5 Flash-Lite (UI code generation) |
 | Export | pdfkit, docx.js, Mermaid.js → PNG (resvg-js) |
 | UML rendering | Mermaid.js (browser) + resvg-js (PDF export) |
 | Deployment | Vercel (frontend) · Render (backend) |
@@ -48,6 +48,7 @@ Artifacts are viewable in an IEEE 830-structured SRS document tab and individual
 - Node.js 20+
 - A [Neon](https://neon.tech) PostgreSQL database (free tier works)
 - A [Groq](https://console.groq.com) API key (free)
+- A [Gemini](https://aistudio.google.com/apikey) API key (free) — used for UI code generation
 
 ### 1. Clone
 
@@ -61,7 +62,7 @@ cd REQ2UI
 ```bash
 cd backend
 cp .env.example .env
-# Fill in: DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET, GROQ_API_KEY, FRONTEND_URL
+# Fill in: DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET, GROQ_API_KEY, GEMINI_API_KEY, FRONTEND_URL
 npm install
 npm run migrate      # creates tables in Neon
 npm run dev          # http://localhost:4000
@@ -89,7 +90,8 @@ REQ2UI/
 │   │   ├── middleware/      # JWT auth guard
 │   │   ├── routes/         # auth · projects · generate · export · artifacts
 │   │   └── services/
-│   │       ├── groq.service.ts      # Groq SDK wrapper
+│   │       ├── groq.service.ts      # Groq SDK wrapper (analysis stages)
+│   │       ├── gemini.service.ts    # Gemini SDK wrapper (UI code gen)
 │   │       ├── pipeline.service.ts  # 9-stage orchestrator + SSE
 │   │       └── export.service.ts    # PDF · DOCX · LaTeX · CSV
 │   └── package.json
@@ -141,7 +143,7 @@ REQ2UI/
 | Backend | Render (free) | `render.yaml` · build: `npm install --include=dev && npm run build` |
 | Frontend | Vercel | `frontend/vercel.json` · root dir: `frontend/` |
 
-**Required env vars on Render:** `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `GROQ_API_KEY`, `FRONTEND_URL`, `NODE_ENV=production`
+**Required env vars on Render:** `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `FRONTEND_URL`, `NODE_ENV=production`
 
 **Required env vars on Vercel:** `VITE_API_BASE_URL=https://req2ui-backend.onrender.com`
 

@@ -12,6 +12,7 @@ export const env = {
   JWT_SECRET: required("JWT_SECRET"),
   JWT_REFRESH_SECRET: required("JWT_REFRESH_SECRET"),
   GROQ_API_KEY: required("GROQ_API_KEY"),
+  GEMINI_API_KEY: required("GEMINI_API_KEY"),
   NODE_ENV: process.env.NODE_ENV ?? "development",
   PORT: parseInt(process.env.PORT ?? "4000", 10),
   FRONTEND_URL: process.env.FRONTEND_URL ?? "http://localhost:5173",
