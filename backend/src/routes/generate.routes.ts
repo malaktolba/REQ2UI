@@ -42,12 +42,33 @@ router.get("/:id/generate", requireAuth, genLimiter, async (req: Request, res: R
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
+  // Guard against running the full pipeline on input too thin to yield a real
+  // SRS — only obvious non-input like "todo app". The Stage 2 floor check is the
+  // real safety net; this just avoids burning API budget on clear garbage. Only
+  // enforced on a never-run project, so it never blocks a resume/re-generate.
+  // Emitted as an SSE error (not a 4xx) because the client is an EventSource,
+  // which can't read a non-2xx response body.
+  const wordCount = (project.description ?? "").trim().split(/\s+/).filter(Boolean).length;
+  if (project.status === "pending" && wordCount < 6) {
+    send("error", {
+      error:
+        "Project description is too short to generate from. Add a sentence or two " +
+        "about the system, its users, and what it should do, then try again.",
+    });
+    res.end();
+    return;
+  }
+
   try {
     await runPipeline(
       project.id,
       project.name,
       project.description,
-      (stageEvent) => send("stage", stageEvent)
+      (stageEvent) => send("stage", stageEvent),
+      // A completed project means the user explicitly clicked "Re-generate" —
+      // redo every stage. Any other status (pending/failed/interrupted) resumes,
+      // skipping stages whose artifacts already exist.
+      { force: project.status === "completed" }
     );
     send("done", { message: "Pipeline complete" });
   } catch (err: any) {

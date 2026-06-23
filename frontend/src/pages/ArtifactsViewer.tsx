@@ -906,11 +906,20 @@ function SRSDocumentView({ data, projectName }: { data: Record<string, any>; pro
         </div>
       </div>
 
+      {/* Abstract */}
+      {ext.abstract && (
+        <div className="bg-slate-900/50 light:bg-slate-50 border border-slate-800 light:border-slate-200 rounded-xl p-6 mb-10">
+          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Abstract</h2>
+          <p className="text-slate-300 light:text-slate-700 text-sm leading-relaxed">{ext.abstract}</p>
+        </div>
+      )}
+
       {/* TOC */}
       <div className="bg-slate-900/50 light:bg-slate-50 border border-slate-800 light:border-slate-200 rounded-xl p-6 mb-10">
         <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Table of Contents</h2>
         <div className="space-y-1.5 font-mono text-sm">
           {[
+            ...(ext.abstract ? [{ n: "", label: "Abstract", indent: false }] : []),
             { n: "1.", label: "Introduction", indent: false },
             { n: "2.", label: "Overall Description", indent: false },
             { n: "3.", label: "Specific Requirements", indent: false },
@@ -935,17 +944,39 @@ function SRSDocumentView({ data, projectName }: { data: Record<string, any>; pro
             with IEEE Std 830-1998 and serves as the authoritative reference for system design, development, and testing.
           </p>
         </SRSSubsection>
-        <SRSSubsection number="1.2" title="Scope">
-          <p className="text-slate-300 text-sm leading-relaxed">{ext.system_summary ?? "—"}</p>
+        {ext.motivation && (
+          <SRSSubsection number="1.2" title="Motivation">
+            <p className="text-slate-300 text-sm leading-relaxed">{ext.motivation}</p>
+          </SRSSubsection>
+        )}
+        {ext.problem_statement && (
+          <SRSSubsection number="1.3" title="Problem Statement">
+            <p className="text-slate-300 text-sm leading-relaxed">{ext.problem_statement}</p>
+          </SRSSubsection>
+        )}
+        <SRSSubsection number="1.4" title="Scope">
+          <p className="text-slate-300 text-sm leading-relaxed">{ext.scope ?? ext.system_summary ?? "—"}</p>
         </SRSSubsection>
-        <SRSSubsection number="1.3" title="Intended Users">
+        {ext.objectives?.length > 0 && (
+          <SRSSubsection number="1.5" title="Objectives">
+            <ol className="space-y-2">
+              {ext.objectives.map((o: string, i: number) => (
+                <li key={i} className="flex gap-3 text-sm text-slate-300">
+                  <span className="text-slate-600 font-mono w-6 flex-shrink-0">{i + 1}.</span>
+                  <span className="leading-relaxed">{o}</span>
+                </li>
+              ))}
+            </ol>
+          </SRSSubsection>
+        )}
+        <SRSSubsection number="1.6" title="Intended Users">
           <div className="flex flex-wrap gap-2">
             {(ext.actors ?? []).map((a: string) => (
               <span key={a} className="bg-slate-800 light:bg-slate-100 border border-slate-700 light:border-slate-200 text-slate-300 light:text-slate-700 text-xs px-3 py-1 rounded-full">{a}</span>
             ))}
           </div>
         </SRSSubsection>
-        <SRSSubsection number="1.4" title="Document Conventions">
+        <SRSSubsection number="1.7" title="Document Conventions">
           <p className="text-slate-400 text-sm leading-relaxed">
             Requirements prefixed <code className="text-indigo-400 font-mono text-xs">FR-</code> are functional.
             Prefixed <code className="text-violet-400 font-mono text-xs">NFR-</code> are non-functional.
@@ -957,8 +988,8 @@ function SRSDocumentView({ data, projectName }: { data: Record<string, any>; pro
 
       {/* Section 2 */}
       <SRSSection number="2" title="Overall Description">
-        <SRSSubsection number="2.1" title="System Overview">
-          <p className="text-slate-300 text-sm leading-relaxed">{ext.system_summary ?? "—"}</p>
+        <SRSSubsection number="2.1" title="Product Perspective">
+          <p className="text-slate-300 text-sm leading-relaxed">{ext.product_perspective ?? ext.system_summary ?? "—"}</p>
         </SRSSubsection>
         <SRSSubsection number="2.2" title="User Characteristics">
           <div className="flex flex-wrap gap-2">
@@ -967,7 +998,31 @@ function SRSDocumentView({ data, projectName }: { data: Record<string, any>; pro
             ))}
           </div>
         </SRSSubsection>
-        <SRSSubsection number="2.3" title="Identified System Needs">
+        {ext.assumptions?.length > 0 && (
+          <SRSSubsection number="2.3" title="Assumptions">
+            <ul className="space-y-2">
+              {ext.assumptions.map((a: string, i: number) => (
+                <li key={i} className="flex gap-3 text-sm text-slate-300">
+                  <span className="text-slate-600 flex-shrink-0">•</span>
+                  <span className="leading-relaxed">{a}</span>
+                </li>
+              ))}
+            </ul>
+          </SRSSubsection>
+        )}
+        {ext.constraints?.length > 0 && (
+          <SRSSubsection number="2.4" title="Constraints">
+            <ul className="space-y-2">
+              {ext.constraints.map((c: string, i: number) => (
+                <li key={i} className="flex gap-3 text-sm text-slate-300">
+                  <span className="text-slate-600 flex-shrink-0">•</span>
+                  <span className="leading-relaxed">{c}</span>
+                </li>
+              ))}
+            </ul>
+          </SRSSubsection>
+        )}
+        <SRSSubsection number="2.5" title="Identified System Needs">
           <ol className="space-y-2">
             {(ext.extracted ?? []).map((req: string, i: number) => (
               <li key={i} className="flex gap-3 text-sm text-slate-300">

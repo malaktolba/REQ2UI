@@ -7,6 +7,10 @@ export interface StageEvent {
   name: string;
   status: "running" | "completed" | "failed";
   error?: string;
+  // Sub-progress for long stages (currently Stage 10 UI generation): a human
+  // detail line and a current/total counter the frontend renders under the row.
+  detail?: string;
+  progress?: { current: number; total: number };
 }
 
 type Emit = (event: StageEvent) => void;
@@ -28,7 +32,7 @@ const STAGE_NAMES = [
 // Lighter structured stages get tighter caps for runaway protection; the
 // content-heavy stages (functional reqs, test cases, wireframes) keep headroom.
 const STAGE_MAX_TOKENS = [
-  3000, // 1  Requirement Extraction
+  5000, // 1  Requirement Extraction + SRS narrative front-matter
   6000, // 2  Functional Requirements
   3000, // 3  Non-Functional Requirements
   4000, // 4  Security Requirements
@@ -78,7 +82,8 @@ async function runStage<T>(
   system: string,
   user: string,
   emit: Emit,
-  maxTokens?: number
+  maxTokens?: number,
+  transform?: (raw: any) => any
 ): Promise<T> {
   const name = STAGE_NAMES[stageNum - 1];
   const cap = maxTokens ?? STAGE_MAX_TOKENS[stageNum - 1] ?? 8000;
@@ -86,7 +91,8 @@ async function runStage<T>(
   await upsertStage(projectId, stageNum, "running");
 
   try {
-    const result = await callGroq(system, user, cap);
+    const raw = await callGroq(system, user, cap);
+    const result = transform ? transform(raw) : raw;
     await upsertArtifact(projectId, artifactType, result);
     await upsertStage(projectId, stageNum, "completed");
     emit({ stage: stageNum, name, status: "completed" });
@@ -97,6 +103,60 @@ async function runStage<T>(
     emit({ stage: stageNum, name, status: "failed", error: msg });
     throw err;
   }
+}
+
+/** Map of artifact type → content for stages already persisted for this project. */
+async function loadCompletedArtifacts(projectId: string): Promise<Record<string, any>> {
+  const rows = await sql`
+    SELECT type, content FROM artifacts WHERE project_id = ${projectId}
+  ` as any[];
+  return Object.fromEntries(rows.map((a: any) => [a.type, a.content]));
+}
+
+/**
+ * Runs a stage, or returns its cached artifact when one already exists (resume).
+ * On a cache hit we still mark the stage completed and emit so the UI fills in,
+ * but we skip the LLM call entirely — letting an interrupted run pick up where
+ * it stopped instead of paying for every stage again.
+ */
+async function stageOrCached<T>(
+  cache: Record<string, any>,
+  projectId: string,
+  stageNum: number,
+  artifactType: string,
+  system: string,
+  user: string,
+  emit: Emit,
+  maxTokens?: number,
+  transform?: (raw: any) => any
+): Promise<T> {
+  if (cache[artifactType] !== undefined && cache[artifactType] !== null) {
+    const name = STAGE_NAMES[stageNum - 1];
+    await upsertStage(projectId, stageNum, "completed");
+    emit({ stage: stageNum, name, status: "completed" });
+    return cache[artifactType] as T;
+  }
+  return runStage<T>(projectId, stageNum, artifactType, system, user, emit, maxTokens, transform);
+}
+
+/** Strips code fences / stray whitespace that break Mermaid rendering. */
+function sanitizeMermaid(code: unknown): unknown {
+  if (typeof code !== "string") return code;
+  return code
+    .replace(/^\s*```(?:mermaid)?\s*/i, "") // leading ```mermaid fence
+    .replace(/```\s*$/i, "")                // trailing fence
+    .replace(/[ \t]+$/gm, "")               // trailing whitespace per line
+    .trim();
+}
+
+/** Post-processes the UML stage output, cleaning each diagram's Mermaid source. */
+function sanitizeUmlArtifact(raw: any): any {
+  if (Array.isArray(raw?.diagrams)) {
+    for (const d of raw.diagrams) {
+      if (d && typeof d.mermaid === "string") d.mermaid = sanitizeMermaid(d.mermaid);
+    }
+  }
+  return raw;
 }
 
 // Coarse category for a wireframe screen, used to avoid spending UI-generation
@@ -144,14 +204,25 @@ async function generateUICodeMultipass(
   s1: any,
   s2: any,
   s7: any,
-  emit: Emit
+  emit: Emit,
+  cached?: any
 ): Promise<void> {
   const stageName = STAGE_NAMES[9];
-  emit({ stage: 10, name: stageName, status: "running" });
+
+  // Resume: if UI code already exists, fill the stage in without re-calling Gemini.
+  if (cached !== undefined && cached !== null) {
+    await upsertStage(projectId, 10, "completed");
+    emit({ stage: 10, name: stageName, status: "completed" });
+    return;
+  }
+
+  const screens = selectDistinctScreens(s7.screens ?? [], 6);
+  const total = screens.length;
+
+  emit({ stage: 10, name: stageName, status: "running", detail: "Designing the UI system…", progress: { current: 0, total } });
   await upsertStage(projectId, 10, "running");
 
   try {
-    const screens = selectDistinctScreens(s7.screens ?? [], 4);
     const routeMap = screens
       .map((sc: any) => `${sc.name}: ${sc.route ?? "/" + sc.id.toLowerCase()}`)
       .join(" | ");
@@ -194,6 +265,7 @@ Design rules:
     }
 
     const generatedScreens: any[] = [];
+    let completedCount = 0;
     const BATCH = 3;
     for (let i = 0; i < screens.length; i += BATCH) {
       const batch = screens.slice(i, i + BATCH);
@@ -241,6 +313,15 @@ Project: ${projectName}
 Actors: ${s1.actors?.join(", ")}
 System: ${s1.system_summary}`
           );
+
+          completedCount++;
+          emit({
+            stage: 10,
+            name: stageName,
+            status: "running",
+            detail: `Generated ${sc.name}`,
+            progress: { current: completedCount, total },
+          });
 
           return {
             id: sc.id,
@@ -297,28 +378,44 @@ export async function runPipeline(
   projectId: string,
   projectName: string,
   description: string,
-  emit: Emit
+  emit: Emit,
+  opts: { force?: boolean } = {}
 ): Promise<void> {
   await sql`UPDATE projects SET status = 'generating', updated_at = NOW() WHERE id = ${projectId}`;
 
+  // Resume support: with force=false (default), stages whose artifact already
+  // exists are skipped, so an interrupted/failed run continues where it stopped.
+  // force=true (explicit "Re-generate") starts from an empty cache and redoes all.
+  const cache = opts.force ? {} : await loadCompletedArtifacts(projectId);
+
   try {
     // ── Stage 1: Requirement Extraction ──────────────────────────────────────
-    const s1 = await runStage<any>(
+    const s1 = await stageOrCached<any>(
+      cache,
       projectId, 1, "extraction",
-      `You are a senior software analyst. Extract all software requirements from the user's project description.
+      `You are a senior software analyst and technical writer. Analyse the user's project description and produce BOTH a structured requirement extraction AND the narrative front-matter for a formal IEEE 830 Software Requirements Specification (thesis style).
 Return a JSON object with this exact shape:
 {
-  "system_summary": "2-3 sentence summary of the system",
+  "system_summary": "2-3 sentence plain-language summary of the system",
+  "abstract": "150-220 word formal abstract: what the system is, who it serves, the approach taken, and the value it delivers",
+  "motivation": "one paragraph on why this system is needed and the opportunity it addresses",
+  "problem_statement": "one paragraph precisely stating the problem the system solves",
+  "scope": "one paragraph describing what is in scope (and briefly what is out of scope)",
+  "objectives": ["concrete project objective 1", "objective 2", "..."],
+  "product_perspective": "one paragraph on how the system fits into its environment and relates to existing systems and users",
+  "assumptions": ["assumption 1", "assumption 2", "..."],
+  "constraints": ["constraint 1", "constraint 2", "..."],
   "actors": ["actor1", "actor2"],
-  "extracted": ["clear requirement statement 1", "clear requirement statement 2", ...]
+  "extracted": ["clear requirement statement 1", "clear requirement statement 2", "..."]
 }
-Extract at least 10 distinct requirements. Be specific and implementation-agnostic.`,
+Write the prose fields in clear, formal academic language suitable for a graduation thesis. Provide 4-7 objectives, at least 3 assumptions and 3 constraints, and extract at least 10 distinct, implementation-agnostic requirements.`,
       `Project: ${projectName}\n\nDescription:\n${description}`,
       emit
     );
 
     // ── Stage 2: Functional Requirements (IEEE 830) ───────────────────────────
-    const s2 = await runStage<any>(
+    const s2 = await stageOrCached<any>(
+      cache,
       projectId, 2, "functional_requirements",
       `You are a software requirements engineer. Convert extracted requirements into formal IEEE 830 functional requirements.
 Return a JSON object with this exact shape:
@@ -342,9 +439,24 @@ ${s1.extracted?.map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}`,
       emit
     );
 
-    // ── Stage 3: Non-Functional Requirements ─────────────────────────────────
-    const s3 = await runStage<any>(
-      projectId, 3, "non_functional_requirements",
+    // Floor check: everything downstream (tests, traceability, UI) is derived
+    // from the functional requirements, so a near-empty S2 means vague input —
+    // fail loudly with an actionable message rather than build a hollow SRS.
+    if (!Array.isArray(s2.requirements) || s2.requirements.length < 3) {
+      throw new Error(
+        "Too few functional requirements could be derived from the description. " +
+        "Add more detail about the system's features and behaviour, then re-generate."
+      );
+    }
+
+    // ── Layer A: Stages 3,4,5 run concurrently (each depends only on S1/S2) ───
+    // They're independent, so fire them together; the Groq client's 429 retry/
+    // backoff absorbs any per-minute rate-limit bursts from the parallelism.
+    const [, s4, s5] = await Promise.all([
+      // Stage 3: Non-Functional Requirements
+      stageOrCached<any>(
+        cache,
+        projectId, 3, "non_functional_requirements",
       `You are a software architect. Generate non-functional requirements for the system.
 Return a JSON object with this exact shape:
 {
@@ -362,12 +474,12 @@ Generate at least 8 NFRs covering different quality attributes.`,
       `Project: ${projectName}
 System summary: ${s1.system_summary}
 Functional requirements count: ${s2.requirements?.length}`,
-      emit
-    );
-
-    // ── Stage 4: Security Requirements (OWASP) ───────────────────────────────
-    const s4 = await runStage<any>(
-      projectId, 4, "security_requirements",
+        emit
+      ),
+      // Stage 4: Security Requirements (OWASP)
+      stageOrCached<any>(
+        cache,
+        projectId, 4, "security_requirements",
       `You are a cybersecurity architect. Generate security requirements based on OWASP Top 10 2021.
 Return a JSON object with this exact shape:
 {
@@ -386,14 +498,14 @@ Map requirements to relevant OWASP categories. Generate at least 8 security requ
       `Project: ${projectName}
 System summary: ${s1.system_summary}
 Actors: ${s1.actors?.join(", ")}
-Key functional requirements:
-${s2.requirements?.slice(0, 5).map((r: any) => `${r.id}: ${r.title}`).join("\n")}`,
-      emit
-    );
-
-    // ── Stage 5: Functional Test Cases (IEEE 829) ────────────────────────────
-    const s5 = await runStage<any>(
-      projectId, 5, "functional_test_cases",
+Functional requirements:
+${s2.requirements?.map((r: any) => `${r.id}: ${r.title}`).join("\n")}`,
+        emit
+      ),
+      // Stage 5: Functional Test Cases (IEEE 829)
+      stageOrCached<any>(
+        cache,
+        projectId, 5, "functional_test_cases",
       `You are a QA engineer. Generate IEEE 829 functional test cases for the functional requirements.
 Return a JSON object with this exact shape:
 {
@@ -413,12 +525,16 @@ Generate at least 2 test cases per functional requirement. Include positive and 
       `Project: ${projectName}
 Functional requirements:
 ${s2.requirements?.map((r: any) => `${r.id}: ${r.title} — ${r.description}`).join("\n")}`,
-      emit
-    );
+        emit
+      ),
+    ]);
 
-    // ── Stage 6: Security Test Cases ─────────────────────────────────────────
-    const s6 = await runStage<any>(
-      projectId, 6, "security_test_cases",
+    // ── Layer B: Stages 6,7 run concurrently (S6 needs S4; S7 needs S1/S2) ────
+    const [, s7] = await Promise.all([
+      // Stage 6: Security Test Cases
+      stageOrCached<any>(
+        cache,
+        projectId, 6, "security_test_cases",
       `You are a penetration tester. Generate security test cases for the security requirements.
 Return a JSON object with this exact shape:
 {
@@ -438,12 +554,12 @@ Generate at least 1 test case per security requirement.`,
       `Project: ${projectName}
 Security requirements:
 ${s4.requirements?.map((r: any) => `${r.id}: ${r.title} (${r.owasp_category})`).join("\n")}`,
-      emit
-    );
-
-    // ── Stage 7: UI Wireframe Descriptions ───────────────────────────────────
-    const s7 = await runStage<any>(
-      projectId, 7, "wireframes",
+        emit
+      ),
+      // Stage 7: UI Wireframe Descriptions
+      stageOrCached<any>(
+        cache,
+        projectId, 7, "wireframes",
       `You are a UX designer. Generate detailed UI wireframe descriptions for all screens in the system.
 Return a JSON object with this exact shape:
 {
@@ -466,12 +582,16 @@ System summary: ${s1.system_summary}
 Actors: ${s1.actors?.join(", ")}
 Key functional requirements:
 ${s2.requirements?.map((r: any) => `${r.id}: ${r.title}`).join("\n")}`,
-      emit
-    );
+        emit
+      ),
+    ]);
 
-    // ── Stage 8: Traceability Matrix ─────────────────────────────────────────
-    await runStage<any>(
-      projectId, 8, "traceability_matrix",
+    // ── Layer C: Stages 8,9,10 run concurrently (depend on Layer A/B) ─────────
+    await Promise.all([
+      // Stage 8: Traceability Matrix
+      stageOrCached<any>(
+        cache,
+        projectId, 8, "traceability_matrix",
       `You are a requirements manager. Build a traceability matrix linking functional requirements to test cases and security requirements.
 Return a JSON object with this exact shape:
 {
@@ -497,12 +617,12 @@ ${s2.requirements?.map((r: any) => `${r.id}: ${r.title}`).join("\n")}
 Functional test cases available: ${s5.test_cases?.map((t: any) => t.id).join(", ")}
 
 Security requirements available: ${s4.requirements?.map((r: any) => r.id).join(", ")}`,
-      emit
-    );
-
-    // ── Stage 9: UML Diagrams (Mermaid.js) ──────────────────────────────────
-    await runStage<any>(
-      projectId, 9, "uml_diagrams",
+        emit
+      ),
+      // Stage 9: UML Diagrams (Mermaid.js)
+      stageOrCached<any>(
+        cache,
+        projectId, 9, "uml_diagrams",
       `You are a software architect. Generate exactly 3 UML diagrams as valid Mermaid.js code.
 
 Return a JSON object with this exact shape:
@@ -544,16 +664,21 @@ System summary: ${s1.system_summary}
 Actors: ${s1.actors?.join(", ")}
 Key functional requirements:
 ${s2.requirements?.slice(0, 8).map((r: any) => `${r.id}: ${r.title}`).join("\n")}
-Main domain entities implied by requirements (infer from context).`,
-      emit
-    );
-
-    // ── Stage 10: UI Code Generation (multipass) ─────────────────────────────
-    await generateUICodeMultipass(projectId, projectName, s1, s2, s7, emit);
+Screens (derive domain entities and interactions from these):
+${s7.screens?.map((sc: any) => `${sc.name}${sc.description ? ` — ${sc.description}` : ""}`).join("\n")}`,
+        emit,
+        undefined,
+        sanitizeUmlArtifact
+      ),
+      // Stage 10: UI Code Generation (multipass — needs S1, S2, S7)
+      generateUICodeMultipass(projectId, projectName, s1, s2, s7, emit, cache.ui_code),
+    ]);
 
     await sql`UPDATE projects SET status = 'completed', updated_at = NOW() WHERE id = ${projectId}`;
-  } catch {
+  } catch (err) {
     await sql`UPDATE projects SET status = 'failed', updated_at = NOW() WHERE id = ${projectId}`;
-    throw new Error("Pipeline failed");
+    // Preserve the real message (a failed stage's Groq error, or the floor-check
+    // guidance above) so the SSE error event can surface something actionable.
+    throw err instanceof Error ? err : new Error("Pipeline failed");
   }
 }

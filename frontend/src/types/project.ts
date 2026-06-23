@@ -17,6 +17,9 @@ export interface PipelineStage {
   error: string | null;
   started_at: string | null;
   finished_at: string | null;
+  // Optional sub-progress streamed for long stages (e.g. Stage 10 per-screen).
+  detail?: string;
+  progress?: { current: number; total: number };
 }
 
 export interface Artifact {

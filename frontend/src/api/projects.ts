@@ -1,5 +1,5 @@
 import api from "./axios";
-import type { Project, Artifact } from "../types/project";
+import type { Project, Artifact, PipelineStage } from "../types/project";
 
 export async function fetchProjects(): Promise<Project[]> {
   const { data } = await api.get<{ projects: Project[] }>("/projects");
@@ -9,6 +9,14 @@ export async function fetchProjects(): Promise<Project[]> {
 export async function fetchProject(id: string): Promise<Project> {
   const { data } = await api.get<{ project: Project }>(`/projects/${id}`);
   return data.project;
+}
+
+/** Project plus its persisted pipeline stages — used to render prior progress. */
+export async function fetchProjectWithStages(
+  id: string
+): Promise<{ project: Project; stages: PipelineStage[] }> {
+  const { data } = await api.get<{ project: Project; stages: PipelineStage[] }>(`/projects/${id}`);
+  return { project: data.project, stages: data.stages ?? [] };
 }
 
 export async function createProject(payload: { name: string; description: string }): Promise<Project> {

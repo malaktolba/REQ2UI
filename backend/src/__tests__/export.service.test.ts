@@ -68,19 +68,6 @@ const SAMPLE_ARTIFACTS = [
   },
 ];
 
-/** Extract the body of a subsubsection (between its heading and the next heading) */
-function extractSubsection(latex: string, sectionTitle: string): string {
-  const start = latex.indexOf(sectionTitle);
-  if (start === -1) return "";
-  // Find next \subsection or \subsubsection or \section after this one
-  const after = latex.indexOf("\\", start + sectionTitle.length + 10);
-  const nextSection = latex.search(new RegExp("\\\\sub(sub)?section\\*|\\\\section\\*", ""));
-  // Find next heading after current position
-  const rest = latex.slice(start + sectionTitle.length);
-  const nextHeading = rest.search(/\\(sub)?section\*/);
-  return nextHeading === -1 ? rest : rest.slice(0, nextHeading);
-}
-
 // ─── LaTeX tests ─────────────────────────────────────────────────────────────
 
 describe("generateLaTeX", () => {
@@ -90,70 +77,66 @@ describe("generateLaTeX", () => {
     latex = generateLaTeX("E-Learning Platform", SAMPLE_ARTIFACTS);
   });
 
-  it("produces valid LaTeX document structure", () => {
-    expect(latex).toContain("\\documentclass");
+  it("produces a thesis-style report document structure", () => {
+    expect(latex).toContain("\\documentclass[11pt,a4paper]{report}");
     expect(latex).toContain("\\begin{document}");
     expect(latex).toContain("\\end{document}");
-    expect(latex).toContain("\\maketitle");
     expect(latex).toContain("\\tableofcontents");
+    expect(latex).toContain("\\listoftables");
   });
 
-  it("includes project name in title", () => {
+  it("defines the thesis colour palette and styled headings", () => {
+    expect(latex).toContain("\\definecolor{procastnavy}{HTML}{1A3A52}");
+    expect(latex).toContain("\\titleformat{\\chapter}");
+    expect(latex).toContain("\\pagestyle{fancy}");
+  });
+
+  it("includes a title page and front matter", () => {
+    expect(latex).toContain("\\begin{titlepage}");
+    expect(latex).toContain("\\chapter*{Declaration of Originality}");
+    expect(latex).toContain("\\chapter*{Abstract}");
+    expect(latex).toContain("\\chapter*{Abbreviations}");
+  });
+
+  it("includes the project name on the title page", () => {
     expect(latex).toContain("E-Learning Platform");
   });
 
-  it("includes IEEE section headings", () => {
-    expect(latex).toContain("\\section*{1. Introduction}");
-    expect(latex).toContain("\\section*{2. Overall Description}");
-    expect(latex).toContain("\\section*{3. Specific Requirements}");
+  it("includes numbered chapters and requirement sections", () => {
+    expect(latex).toContain("\\chapter{Introduction}");
+    expect(latex).toContain("\\chapter{Specific Requirements}");
+    expect(latex).toContain("\\section{Functional Requirements (IEEE 830)}");
+    expect(latex).toContain("\\section{Non-Functional Requirements}");
+    expect(latex).toContain("\\section{Security Requirements (OWASP Top 10)}");
   });
 
-  it("includes subsection headings for requirements", () => {
-    expect(latex).toContain("3.1 Functional Requirements");
-    expect(latex).toContain("3.2 Non-Functional Requirements");
-    expect(latex).toContain("3.3 Security Requirements");
-  });
-
-  it("includes requirement IDs and titles", () => {
+  it("renders requirements in colour-headed tables", () => {
+    expect(latex).toContain("\\begin{xltabular}");
+    expect(latex).toContain("\\rowcolor{procastnavy}");
     expect(latex).toContain("FR-001");
     expect(latex).toContain("User Registration");
     expect(latex).toContain("SR-001");
   });
 
+  it("xltabular environments are balanced", () => {
+    const starts = (latex.match(/\\begin\{xltabular\}/g) ?? []).length;
+    const ends = (latex.match(/\\end\{xltabular\}/g) ?? []).length;
+    expect(starts).toBe(ends);
+    expect(starts).toBeGreaterThan(0);
+  });
+
   it("itemize and enumerate environments are balanced", () => {
-    const itemizeStarts = (latex.match(/\\begin\{itemize\}/g) ?? []).length;
-    const itemizeEnds = (latex.match(/\\end\{itemize\}/g) ?? []).length;
-    expect(itemizeStarts).toBe(itemizeEnds);
+    expect((latex.match(/\\begin\{itemize\}/g) ?? []).length).toBe((latex.match(/\\end\{itemize\}/g) ?? []).length);
+    expect((latex.match(/\\begin\{enumerate\}/g) ?? []).length).toBe((latex.match(/\\end\{enumerate\}/g) ?? []).length);
   });
 
-  it("groups SR-001 controls into a single itemize block", () => {
-    // SR-001 has 2 controls — they must share ONE \begin{itemize}
-    const srStart = latex.indexOf("SR-001 — Password Hashing");
-    expect(srStart).toBeGreaterThan(-1);
-    const srSection = latex.slice(srStart);
-    // Only one \begin{itemize} in the SR-001 subsubsection body
-    const nextSubsec = srSection.indexOf("\\subsubsection*", 5);
-    const sr001Body = nextSubsec === -1 ? srSection : srSection.slice(0, nextSubsec);
-    const itemizeCount = (sr001Body.match(/\\begin\{itemize\}/g) ?? []).length;
-    expect(itemizeCount).toBe(1);
-    // Both controls must be \item entries
-    expect(sr001Body).toContain("\\item Use bcrypt");
-    expect(sr001Body).toContain("\\item Never store");
+  it("folds acceptance criteria and controls into requirement rows", () => {
+    expect(latex).toContain("Email must be unique");
+    expect(latex).toContain("Password minimum 8 characters");
+    expect(latex).toContain("Use bcrypt with cost factor 12");
   });
 
-  it("groups FR-001 acceptance criteria into a single itemize block", () => {
-    const frStart = latex.indexOf("FR-001 — User Registration");
-    expect(frStart).toBeGreaterThan(-1);
-    const frSection = latex.slice(frStart);
-    const nextSubsec = frSection.indexOf("\\subsubsection*", 5);
-    const fr001Body = nextSubsec === -1 ? frSection : frSection.slice(0, nextSubsec);
-    const itemizeCount = (fr001Body.match(/\\begin\{itemize\}/g) ?? []).length;
-    expect(itemizeCount).toBe(1);
-    expect(fr001Body).toContain("\\item Email must be unique");
-    expect(fr001Body).toContain("\\item Password minimum 8");
-  });
-
-  it("includes actors", () => {
+  it("includes actors as intended users", () => {
     expect(latex).toContain("Student");
     expect(latex).toContain("Teacher");
   });

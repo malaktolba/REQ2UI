@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { fetchProject, updateProject } from "../api/projects";
+import { fetchProject, fetchProjectWithStages, updateProject } from "../api/projects";
 import type { Project, PipelineStage } from "../types/project";
 import { StatusBadge } from "../components/StatusBadge";
 import { useToast } from "../context/ToastContext";
@@ -38,16 +38,31 @@ function StageIcon({ status }: { status: string }) {
   return <CircleIcon size={15} className="text-slate-600" />;
 }
 
-function StageRow({ stage, name, status }: { stage: number; name: string; status: string }) {
+function StageRow({ stage, name, status, detail, progress }: {
+  stage: number;
+  name: string;
+  status: string;
+  detail?: string;
+  progress?: { current: number; total: number };
+}) {
+  const showSub = status === "running" && (detail || progress);
   return (
     <div className="flex items-center gap-3 py-2.5 border-b border-slate-800 light:border-slate-200 last:border-0">
       <span className="w-5 flex justify-center flex-shrink-0">
         <StageIcon status={status} />
       </span>
       <span className="text-xs text-slate-500 w-5">{stage}</span>
-      <span className={`text-sm ${status === "completed" ? "text-slate-300 light:text-slate-700" : status === "running" ? "text-yellow-300 light:text-yellow-600" : "text-slate-500"}`}>
-        {name}
-      </span>
+      <div className="min-w-0">
+        <span className={`text-sm ${status === "completed" ? "text-slate-300 light:text-slate-700" : status === "running" ? "text-yellow-300 light:text-yellow-600" : "text-slate-500"}`}>
+          {name}
+        </span>
+        {showSub && (
+          <span className="block text-xs text-slate-500 truncate">
+            {detail}
+            {progress && progress.total > 0 ? ` · ${progress.current}/${progress.total}` : ""}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -68,9 +83,12 @@ export default function ProjectDetail() {
 
   useEffect(() => {
     if (!id) return;
-    fetchProject(id)
-      .then((p) => {
+    fetchProjectWithStages(id)
+      .then(({ project: p, stages: existing }) => {
         setProject(p);
+        // Seed any previously-run stages so a resumed/interrupted run shows the
+        // work already done, rather than starting the list from scratch.
+        if (existing.length) setStages(existing);
         setLoading(false);
       })
       .catch(() => {
@@ -308,7 +326,7 @@ export default function ProjectDetail() {
             <p className="text-slate-600 light:text-slate-400 text-sm">Run generation to see progress here.</p>
           ) : (
             stages.map((s) => (
-              <StageRow key={s.stage} stage={s.stage} name={s.name} status={s.status} />
+              <StageRow key={s.stage} stage={s.stage} name={s.name} status={s.status} detail={s.detail} progress={s.progress} />
             ))
           )}
         </div>
