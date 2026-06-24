@@ -15,6 +15,34 @@ export interface StageEvent {
 
 type Emit = (event: StageEvent) => void;
 
+// Optional client/document context captured before generation. Used to enrich
+// the SRS prose (Stage 1 front-matter) and the exported title pages.
+export interface ProjectMetadata {
+  organization?: string;
+  industry?: string;
+  audience?: string;
+  author?: string;
+  contact_email?: string;
+  version?: string;
+}
+
+// Renders the metadata as a prompt block for Stage 1. Only the fields that
+// actually inform the requirements (organization, industry, audience) are
+// included — author/contact/version are document-control data, not content.
+function metadataContextBlock(meta?: ProjectMetadata): string {
+  if (!meta) return "";
+  const lines: string[] = [];
+  if (meta.organization) lines.push(`Commissioning organization: ${meta.organization}`);
+  if (meta.industry) lines.push(`Industry / domain: ${meta.industry}`);
+  if (meta.audience) lines.push(`Target users / audience: ${meta.audience}`);
+  if (!lines.length) return "";
+  return (
+    `\n\nClient & domain context (weave this naturally into the product perspective, ` +
+    `scope, assumptions, and actors — do NOT invent facts beyond it):\n` +
+    lines.join("\n")
+  );
+}
+
 const STAGE_NAMES = [
   "Requirement Extraction",
   "Functional Requirements (IEEE 830)",
@@ -397,7 +425,7 @@ export async function runPipeline(
   projectName: string,
   description: string,
   emit: Emit,
-  opts: { force?: boolean } = {}
+  opts: { force?: boolean; metadata?: ProjectMetadata } = {}
 ): Promise<void> {
   await sql`UPDATE projects SET status = 'generating', updated_at = NOW() WHERE id = ${projectId}`;
 
@@ -427,7 +455,7 @@ Return a JSON object with this exact shape:
   "extracted": ["clear requirement statement 1", "clear requirement statement 2", "..."]
 }
 Write the prose fields in clear, formal academic language suitable for a graduation thesis. Provide 4-7 objectives, at least 3 assumptions and 3 constraints, and extract at least 10 distinct, implementation-agnostic requirements.`,
-      `Project: ${projectName}\n\nDescription:\n${description}`,
+      `Project: ${projectName}\n\nDescription:\n${description}${metadataContextBlock(opts.metadata)}`,
       emit
     );
 

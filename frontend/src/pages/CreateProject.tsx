@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { createProject } from "../api/projects";
+import type { ProjectMetadata } from "../types/project";
 import { useToast } from "../context/ToastContext";
-import { ArrowLeft } from "../components/Icons";
+import { ArrowLeft, ChevronDown } from "../components/Icons";
 import { ThemeToggle } from "../components/ThemeToggle";
 
 const EXAMPLE_PROMPTS = [
@@ -21,12 +22,27 @@ export default function CreateProject() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Optional client/document context — folded away by default to keep the form
+  // simple; included in the create payload only for the fields the user fills.
+  const [showDetails, setShowDetails] = useState(false);
+  const [meta, setMeta] = useState<ProjectMetadata>({});
+  const setMetaField = (key: keyof ProjectMetadata) => (value: string) =>
+    setMeta((m) => ({ ...m, [key]: value }));
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const project = await createProject({ name, description });
+      // Strip blanks so we only send fields the user actually provided.
+      const metadata = Object.fromEntries(
+        Object.entries(meta).filter(([, v]) => v && v.trim())
+      ) as ProjectMetadata;
+      const project = await createProject({
+        name,
+        description,
+        ...(Object.keys(metadata).length ? { metadata } : {}),
+      });
       toast.success("Project created! Run the pipeline to generate artifacts.");
       navigate(`/projects/${project.id}`);
     } catch (err: any) {
@@ -35,6 +51,15 @@ export default function CreateProject() {
       setLoading(false);
     }
   }
+
+  const META_FIELDS: { key: keyof ProjectMetadata; label: string; placeholder: string; type?: string; full?: boolean }[] = [
+    { key: "organization", label: "Organization / company", placeholder: "Acme Corp" },
+    { key: "industry", label: "Industry / domain", placeholder: "Healthcare, Fintech, Education…" },
+    { key: "audience", label: "Target users / audience", placeholder: "Clinicians, patients, administrators…", full: true },
+    { key: "author", label: "Prepared by", placeholder: "Defaults to your account name" },
+    { key: "contact_email", label: "Contact email", placeholder: "Defaults to your account email", type: "email" },
+    { key: "version", label: "Document version", placeholder: "1.0" },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-950 light:bg-white text-white light:text-slate-900 flex flex-col transition-colors">
@@ -121,6 +146,45 @@ export default function CreateProject() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Optional organization & document details */}
+          <div className="border border-slate-800 light:border-slate-200 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowDetails((s) => !s)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left bg-slate-900/60 light:bg-slate-50 hover:bg-slate-900 light:hover:bg-slate-100 transition"
+            >
+              <span className="text-sm font-medium text-slate-300 light:text-slate-700">
+                Organization &amp; document details
+                <span className="text-slate-600 light:text-slate-400 font-normal"> · optional</span>
+              </span>
+              <ChevronDown
+                size={16}
+                className={`text-slate-500 transition-transform ${showDetails ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {showDetails && (
+              <div className="p-4 grid sm:grid-cols-2 gap-4 border-t border-slate-800 light:border-slate-200">
+                <p className="sm:col-span-2 text-xs text-slate-500 light:text-slate-400 leading-relaxed -mb-1">
+                  Adds client and audience context to enrich the generated SRS, and appears on the exported title page. Leave any field blank to skip it.
+                </p>
+                {META_FIELDS.map((f) => (
+                  <div key={f.key} className={f.full ? "sm:col-span-2" : ""}>
+                    <label className="block text-xs font-medium text-slate-400 light:text-slate-600 mb-1">{f.label}</label>
+                    <input
+                      type={f.type ?? "text"}
+                      value={meta[f.key] ?? ""}
+                      onChange={(e) => setMetaField(f.key)(e.target.value)}
+                      maxLength={400}
+                      className="w-full bg-slate-800/80 light:bg-slate-50 border border-slate-700 light:border-slate-300 rounded-lg px-3 py-2 text-sm text-white light:text-slate-900 placeholder-slate-500 light:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                      placeholder={f.placeholder}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <button

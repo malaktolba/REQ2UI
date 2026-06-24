@@ -1,9 +1,20 @@
 export type ProjectStatus = "pending" | "generating" | "completed" | "failed";
 
+/** Optional client/document context captured before generation (all optional). */
+export interface ProjectMetadata {
+  organization?: string;
+  industry?: string;
+  audience?: string;
+  author?: string;
+  contact_email?: string;
+  version?: string;
+}
+
 export interface Project {
   id: string;
   name: string;
   description: string;
+  metadata?: ProjectMetadata;
   status: ProjectStatus;
   artifact_count: number;
   created_at: string;

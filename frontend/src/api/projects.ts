@@ -1,5 +1,5 @@
 import api from "./axios";
-import type { Project, Artifact, PipelineStage } from "../types/project";
+import type { Project, Artifact, PipelineStage, ProjectMetadata } from "../types/project";
 
 export async function fetchProjects(): Promise<Project[]> {
   const { data } = await api.get<{ projects: Project[] }>("/projects");
@@ -19,14 +19,18 @@ export async function fetchProjectWithStages(
   return { project: data.project, stages: data.stages ?? [] };
 }
 
-export async function createProject(payload: { name: string; description: string }): Promise<Project> {
+export async function createProject(payload: {
+  name: string;
+  description: string;
+  metadata?: ProjectMetadata;
+}): Promise<Project> {
   const { data } = await api.post<{ project: Project }>("/projects", payload);
   return data.project;
 }
 
 export async function updateProject(
   id: string,
-  payload: { name?: string; description?: string }
+  payload: { name?: string; description?: string; metadata?: ProjectMetadata }
 ): Promise<Project> {
   const { data } = await api.put<{ project: Project }>(`/projects/${id}`, payload);
   return data.project;

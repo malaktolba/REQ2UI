@@ -35,10 +35,16 @@ async function migrate() {
       name        TEXT NOT NULL,
       description TEXT NOT NULL,
       status      TEXT NOT NULL DEFAULT 'pending',
+      metadata    JSONB NOT NULL DEFAULT '{}'::jsonb,
       deleted_at  TIMESTAMPTZ,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `;
+
+  // Backfill for databases created before `metadata` existed (idempotent).
+  await sql`
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb
   `;
 
   await sql`

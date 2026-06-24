@@ -13,6 +13,21 @@ async function getArtifacts(projectId: string, userId: string) {
   return sql`SELECT type, content FROM artifacts WHERE project_id = ${projectId}` as any;
 }
 
+/**
+ * Stored project metadata merged with account defaults for the document control
+ * fields, so the title page always has an author, contact, and version even when
+ * the user left them blank at creation.
+ */
+function effectiveMeta(row: any, user: { name: string; email: string }) {
+  const m = row?.metadata ?? {};
+  return {
+    ...m,
+    author: m.author || user.name,
+    contact_email: m.contact_email || user.email,
+    version: m.version || "1.0",
+  };
+}
+
 // POST /api/projects/:id/export/pdf  (accepts { diagramSvgs? } in body)
 router.post("/:id/export/pdf", requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
@@ -20,14 +35,14 @@ router.post("/:id/export/pdf", requireAuth, async (req: Request, res: Response):
   const diagramSvgs: Record<string, string> | undefined = req.body?.diagramSvgs;
 
   const [projectRows, artifacts] = await Promise.all([
-    sql`SELECT name FROM projects WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL` as any,
+    sql`SELECT name, metadata FROM projects WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL` as any,
     getArtifacts(id, userId),
   ]);
 
   if (!artifacts) { res.status(404).json({ error: "Project not found" }); return; }
 
   const name = projectRows[0]?.name ?? "Project";
-  const buf = await generatePDF(name, artifacts, diagramSvgs);
+  const buf = await generatePDF(name, artifacts, diagramSvgs, effectiveMeta(projectRows[0], req.user!));
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${name.replace(/[^a-z0-9]/gi, "_")}_req2ui.pdf"`);
@@ -40,14 +55,14 @@ router.get("/:id/export/pdf", requireAuth, async (req: Request, res: Response): 
   const userId = req.user!.sub;
 
   const [projectRows, artifacts] = await Promise.all([
-    sql`SELECT name FROM projects WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL` as any,
+    sql`SELECT name, metadata FROM projects WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL` as any,
     getArtifacts(id, userId),
   ]);
 
   if (!artifacts) { res.status(404).json({ error: "Project not found" }); return; }
 
   const name = projectRows[0]?.name ?? "Project";
-  const buf = await generatePDF(name, artifacts);
+  const buf = await generatePDF(name, artifacts, undefined, effectiveMeta(projectRows[0], req.user!));
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${name.replace(/[^a-z0-9]/gi, "_")}_req2ui.pdf"`);
@@ -60,14 +75,14 @@ router.get("/:id/export/docx", requireAuth, async (req: Request, res: Response):
   const userId = req.user!.sub;
 
   const [projectRows, artifacts] = await Promise.all([
-    sql`SELECT name FROM projects WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL` as any,
+    sql`SELECT name, metadata FROM projects WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL` as any,
     getArtifacts(id, userId),
   ]);
 
   if (!artifacts) { res.status(404).json({ error: "Project not found" }); return; }
 
   const name = projectRows[0]?.name ?? "Project";
-  const buf = await generateDOCX(name, artifacts);
+  const buf = await generateDOCX(name, artifacts, effectiveMeta(projectRows[0], req.user!));
 
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
   res.setHeader("Content-Disposition", `attachment; filename="${name.replace(/[^a-z0-9]/gi, "_")}_req2ui.docx"`);
@@ -80,14 +95,14 @@ router.get("/:id/export/latex", requireAuth, async (req: Request, res: Response)
   const userId = req.user!.sub;
 
   const [projectRows, artifacts] = await Promise.all([
-    sql`SELECT name FROM projects WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL` as any,
+    sql`SELECT name, metadata FROM projects WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL` as any,
     getArtifacts(id, userId),
   ]);
 
   if (!artifacts) { res.status(404).json({ error: "Project not found" }); return; }
 
   const name = projectRows[0]?.name ?? "Project";
-  const tex = generateLaTeX(name, artifacts);
+  const tex = generateLaTeX(name, artifacts, effectiveMeta(projectRows[0], req.user!));
 
   res.setHeader("Content-Type", "application/x-latex");
   res.setHeader("Content-Disposition", `attachment; filename="${name.replace(/[^a-z0-9]/gi, "_")}_req2ui.tex"`);

@@ -6,15 +6,38 @@ import { requireAuth } from "../middleware/auth.middleware";
 const router = Router();
 router.use(requireAuth);
 
+// Optional client/document context used to enrich the generated SRS (prose +
+// title pages). Every field is optional — blanks are simply omitted downstream.
+const metadataSchema = z.object({
+  organization: z.string().max(200).optional(),
+  industry: z.string().max(120).optional(),
+  audience: z.string().max(400).optional(),
+  author: z.string().max(200).optional(),
+  contact_email: z.string().email().max(200).optional().or(z.literal("")),
+  version: z.string().max(40).optional(),
+});
+
 const createSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().min(10).max(5000),
+  metadata: metadataSchema.optional(),
 });
 
 const updateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().min(10).max(5000).optional(),
+  metadata: metadataSchema.optional(),
 });
+
+/** Drops empty/blank fields so `metadata` only ever stores meaningful values. */
+function cleanMetadata(meta?: Record<string, unknown>): Record<string, string> {
+  if (!meta) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(meta)) {
+    if (typeof v === "string" && v.trim()) out[k] = v.trim();
+  }
+  return out;
+}
 
 // POST /api/projects
 router.post("/", async (req: Request, res: Response): Promise<void> => {
@@ -26,11 +49,12 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
 
   const { name, description } = parsed.data;
   const userId = req.user!.sub;
+  const metadata = cleanMetadata(parsed.data.metadata);
 
   const rows = await sql`
-    INSERT INTO projects (user_id, name, description)
-    VALUES (${userId}, ${name}, ${description})
-    RETURNING id, name, description, status, created_at, updated_at
+    INSERT INTO projects (user_id, name, description, metadata)
+    VALUES (${userId}, ${name}, ${description}, ${JSON.stringify(metadata)})
+    RETURNING id, name, description, metadata, status, created_at, updated_at
   ` as any[];
 
   res.status(201).json({ project: rows[0] });
@@ -104,15 +128,21 @@ router.put("/:id", async (req: Request, res: Response): Promise<void> => {
   }
 
   const { name, description } = parsed.data;
+  // Merge metadata onto whatever is stored so a partial PUT only touches the
+  // keys it sends; omit the param entirely to leave metadata untouched.
+  const metadata = parsed.data.metadata ? cleanMetadata(parsed.data.metadata) : null;
 
   const rows = await sql`
     UPDATE projects
     SET
       name = COALESCE(${name ?? null}, name),
       description = COALESCE(${description ?? null}, description),
+      metadata = CASE WHEN ${metadata !== null}
+                   THEN metadata || ${JSON.stringify(metadata ?? {})}::jsonb
+                   ELSE metadata END,
       updated_at = NOW()
     WHERE id = ${id}
-    RETURNING id, name, description, status, created_at, updated_at
+    RETURNING id, name, description, metadata, status, created_at, updated_at
   ` as any[];
 
   res.json({ project: rows[0] });

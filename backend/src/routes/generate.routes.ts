@@ -20,7 +20,7 @@ router.get("/:id/generate", requireAuth, genLimiter, async (req: Request, res: R
   const { id } = req.params;
 
   const rows = await sql`
-    SELECT id, name, description, status FROM projects
+    SELECT id, name, description, status, metadata FROM projects
     WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL
   ` as any[];
 
@@ -68,7 +68,7 @@ router.get("/:id/generate", requireAuth, genLimiter, async (req: Request, res: R
       // A completed project means the user explicitly clicked "Re-generate" —
       // redo every stage. Any other status (pending/failed/interrupted) resumes,
       // skipping stages whose artifacts already exist.
-      { force: project.status === "completed" }
+      { force: project.status === "completed", metadata: project.metadata ?? undefined }
     );
     send("done", { message: "Pipeline complete" });
   } catch (err: any) {
