@@ -1,0 +1,112 @@
+@startuml class
+' Figure 3 - Class Diagram
+skinparam backgroundColor White
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+skinparam roundCorner 6
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #F4F7FB
+  BorderColor #2F5C8F
+  HeaderBackgroundColor #DCE8F6
+  FontColor #1B3A5B
+  ArrowColor #2F5C8F
+}
+
+title Req2UI - Class Diagram (domain + services)
+
+class User {
+  +id: UUID
+  +email: string
+  +passwordHash: string
+  +failedAttempts: int
+  +lockedUntil: timestamp
+  +createdAt: timestamp
+}
+
+class RefreshToken {
+  +id: UUID
+  +userId: UUID
+  +tokenHash: string
+  +family: UUID
+  +expiresAt: timestamp
+  +revoked: boolean
+}
+
+class Project {
+  +id: UUID
+  +userId: UUID
+  +name: string
+  +description: text
+  +deletedAt: timestamp
+  +createdAt: timestamp
+}
+
+class Artifact {
+  +id: UUID
+  +projectId: UUID
+  +type: ArtifactType
+  +content: JSONB
+  --
+  unique(projectId, type)
+}
+
+class PipelineStage {
+  +id: UUID
+  +projectId: UUID
+  +stage: int
+  +status: StageStatus
+  +updatedAt: timestamp
+}
+
+class Export {
+  +id: UUID
+  +projectId: UUID
+  +format: ExportFormat
+  +fileRef: string
+  +createdAt: timestamp
+}
+
+enum ArtifactType {
+  EXTRACTION
+  FUNCTIONAL_REQS
+  NON_FUNCTIONAL_REQS
+  SECURITY_REQS
+  FUNCTIONAL_TESTS
+  SECURITY_TESTS
+  WIREFRAMES
+  TRACEABILITY
+  UML
+  UI_CODE
+}
+
+class PipelineService <<service>> {
+  +run(projectId): SSEStream
+  -callGroq(prompt): JSON
+  -upsertArtifact(...)
+}
+
+class GeminiService <<service>> {
+  +generateDesignSystem(...)
+  +generateScreen(...)
+  -selectDistinctScreens(...)
+}
+
+class ExportService <<service>> {
+  +ieeeSections(artifacts)
+  +toPDF() / toDOCX()
+  +toCSV() / toLaTeX()
+}
+
+User "1" --> "0..*" Project : owns
+User "1" --> "0..*" RefreshToken : has
+Project "1" --> "0..*" Artifact : contains
+Project "1" --> "0..*" PipelineStage : tracks
+Project "1" --> "0..*" Export : produces
+Artifact --> ArtifactType
+
+PipelineService ..> Project : reads/writes
+PipelineService ..> Artifact : upserts
+PipelineService ..> GeminiService : uses (stage 10)
+ExportService ..> Artifact : assembles
+@enduml

@@ -23,6 +23,10 @@ yarn-error.log*
 Thumbs.db
 desktop.ini
 
+# Office temp / owner-lock files (created when a doc is open)
+~$*
+*.~vsd*
+
 # IDE
 .vscode/
 .idea/
@@ -34,3 +38,17 @@ desktop.ini
 
 # TypeScript
 *.tsbuildinfo
+
+# --- Thesis build artifacts ---
+# plantuml.jar (21MB) is auto-downloaded by render-figures.ps1; thesis PDF builds on Overleaf
+thesis.zip
+thesis/tools/plantuml.jar
+thesis/*.pdf
+
+# --- Slidev deck ---
+# node_modules/ and dist/ are already ignored above; png/ holds transient per-slide dumps
+deck/slidev/.slidev/
+deck/slidev/exports/png/
+
+# Stray duplicate (canonical copy lives in deck/legacy-pptx/)
+deck/Req2UI-Defense.pptx

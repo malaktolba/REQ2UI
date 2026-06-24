@@ -1,0 +1,22 @@
+{
+  "name": "req2ui-deck",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "slidev --open",
+    "build": "slidev build",
+    "export": "slidev export --output exports/Req2UI-Defense.pdf",
+    "export:pptx": "slidev export --format pptx --output exports/Req2UI-Defense.pptx",
+    "export:png": "slidev export --format png --output exports/png"
+  },
+  "dependencies": {
+    "@slidev/cli": "^0.49.29",
+    "@slidev/theme-default": "^0.25.0"
+  },
+  "devDependencies": {
+    "playwright-chromium": "^1.45.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

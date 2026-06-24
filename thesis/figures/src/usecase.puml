@@ -1,0 +1,53 @@
+@startuml usecase
+' Figure 4 - Use Case Diagram
+skinparam backgroundColor White
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+skinparam ArrowColor #2F5C8F
+skinparam actorStyle awesome
+skinparam usecase {
+  BackgroundColor #F4F7FB
+  BorderColor #2F5C8F
+  FontColor #1B3A5B
+}
+
+title Req2UI - Use Case Diagram
+
+left to right direction
+
+actor "End User" as user
+actor "System Administrator" as admin
+actor "Groq / Gemini\n(AI services)" as ai
+
+rectangle "Req2UI" {
+  usecase "Register / Login" as UC1
+  usecase "Manage Projects\n(create/edit/delete)" as UC2
+  usecase "Submit Project\nDescription" as UC3
+  usecase "Generate Artifacts\n(run pipeline)" as UC4
+  usecase "Generate SRS\nRequirements" as UC4a
+  usecase "Generate Test Cases" as UC4b
+  usecase "Generate UI Code" as UC4c
+  usecase "View / Refine\nArtifacts" as UC5
+  usecase "Preview UI Code" as UC6
+  usecase "Export Artifacts\n(PDF/DOCX/CSV/LaTeX)" as UC7
+  usecase "Monitor Usage\n& Manage Users" as UC8
+}
+
+user --> UC1
+user --> UC2
+user --> UC3
+user --> UC4
+user --> UC5
+user --> UC6
+user --> UC7
+admin --> UC8
+
+UC4 ..> UC4a : <<include>>
+UC4 ..> UC4b : <<include>>
+UC4 ..> UC4c : <<include>>
+UC3 <.. UC4 : <<extend>>
+
+UC4a --> ai
+UC4b --> ai
+UC4c --> ai
+@enduml

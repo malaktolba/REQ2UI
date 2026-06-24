@@ -1,0 +1,37 @@
+@startuml context
+' Figure 2 - System Context Diagram
+skinparam backgroundColor White
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+skinparam roundCorner 12
+skinparam ArrowColor #2F5C8F
+skinparam rectangle {
+  BackgroundColor #2F5C8F
+  BorderColor #1B3A5B
+  FontColor White
+}
+skinparam actorStyle awesome
+
+title Req2UI - System Context
+
+actor "End User\n(developer, student,\nstartup)" as user
+actor "System\nAdministrator" as admin
+
+rectangle "**Req2UI System**\nAI-driven SRS, UI &\ntest-case generator" as system
+
+cloud "Groq API\n(LLM - stages 1-9)" as groq
+cloud "Google Gemini API\n(UI code - stage 10)" as gemini
+database "Neon PostgreSQL\n(managed cloud DB)" as db
+
+user --> system : project description (NL)
+system --> user : SRS, UI code, test cases,\nexports (PDF/DOCX/CSV/LaTeX)
+admin --> system : monitor usage,\nmanage accounts
+
+system --> groq : requirement &\ntest-case prompts
+groq --> system : structured artifacts
+system --> gemini : design-system &\nper-screen prompts
+gemini --> system : HTML/Tailwind UI code
+system --> db : persist projects\n& artifacts
+db --> system : stored data
+
+@enduml

@@ -1,0 +1,58 @@
+@startuml activity
+' Figure 6 - Activity Diagram (end-to-end workflow)
+skinparam backgroundColor White
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+skinparam ArrowColor #2F5C8F
+skinparam activity {
+  BackgroundColor #F4F7FB
+  BorderColor #2F5C8F
+  FontColor #1B3A5B
+  DiamondBackgroundColor #DCE8F6
+  DiamondBorderColor #2F5C8F
+}
+
+title Req2UI - End-to-End Workflow
+
+start
+:User registers / logs in;
+if (Authenticated?) then (no)
+  :Show error / lockout;
+  stop
+else (yes)
+endif
+:Create or open project;
+:Enter natural-language description;
+if (Input valid?) then (no)
+  :Show validation feedback;
+  stop
+else (yes)
+endif
+
+:Start pipeline (SSE);
+partition "Stages 1-9 (Groq)" {
+  :Extract requirements;
+  :Generate functional reqs;
+  :Generate non-functional reqs;
+  :Generate security reqs (OWASP);
+  :Generate functional test cases;
+  :Generate security test cases;
+  :Generate wireframe descriptions;
+  :Build traceability matrix;
+  :Generate UML (Mermaid);
+}
+partition "Stage 10 (Gemini)" {
+  :Generate design system;
+  :Generate per-screen UI code;
+}
+:Persist artifacts to DB;
+
+:User reviews / refines artifacts;
+:Preview generated UI code;
+if (Export?) then (yes)
+  :Export PDF / DOCX / CSV / LaTeX;
+else (no)
+endif
+:Return to dashboard;
+stop
+@enduml

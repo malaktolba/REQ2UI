@@ -1,0 +1,52 @@
+@startuml sequence
+' Figure 5 - Sequence Diagram (artifact generation via SSE)
+skinparam backgroundColor White
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+skinparam ArrowColor #2F5C8F
+skinparam sequence {
+  ParticipantBackgroundColor #DCE8F6
+  ParticipantBorderColor #2F5C8F
+  ParticipantFontColor #1B3A5B
+  ActorBackgroundColor #F4F7FB
+  LifeLineBorderColor #88A
+}
+
+title Req2UI - Generate Artifacts (10-stage SSE pipeline)
+
+actor User
+participant "React SPA" as SPA
+participant "Express API" as API
+participant "Pipeline\nService" as PIPE
+participant "Groq" as GROQ
+participant "Gemini" as GEM
+database "Neon DB" as DB
+
+User -> SPA : open project, click Generate
+SPA -> API : GET /projects/:id/generate?token=JWT (SSE)
+API -> API : verify JWT
+API -> PIPE : run(projectId)
+
+loop stages 1..9 (Groq)
+  PIPE -> GROQ : prompt(stage input)
+  GROQ --> PIPE : structured JSON
+  PIPE -> DB : upsert artifact + stage status
+  PIPE --> SPA : SSE event {stage, progress}
+  SPA --> User : live progress bar
+end
+
+group stage 10 - UI code (Gemini)
+  PIPE -> GEM : design system prompt
+  GEM --> PIPE : navbar/footer/Tailwind config
+  loop each distinct screen
+    PIPE -> GEM : per-screen HTML prompt
+    GEM --> PIPE : screen HTML
+  end
+  PIPE -> DB : upsert UI_CODE artifact
+  PIPE --> SPA : SSE event {stage 10 done}
+end
+
+PIPE --> API : complete
+API --> SPA : SSE done
+SPA --> User : render artifacts viewer
+@enduml

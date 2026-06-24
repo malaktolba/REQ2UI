@@ -1,0 +1,68 @@
+@startuml architecture
+' Figure 1 - System Architecture (layered)
+skinparam backgroundColor White
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+skinparam roundCorner 10
+skinparam component {
+  BackgroundColor #F4F7FB
+  BorderColor #2F5C8F
+  FontColor #1B3A5B
+}
+skinparam rectangle {
+  BorderColor #88A
+  FontColor #1B3A5B
+}
+skinparam ArrowColor #2F5C8F
+
+title Req2UI - System Architecture
+
+actor "User" as user
+
+rectangle "Presentation Layer" #EAF2FB {
+  component "React 19 SPA\n(Vite, Tailwind v4,\nReact Router 7)" as spa
+  component "Axios Client\n(silent JWT refresh)" as axios
+}
+
+rectangle "Application Layer (Express 4 / TypeScript)" #EAFBF1 {
+  component "Auth Service\n(JWT, refresh rotation,\naccount lockout)" as auth
+  component "Project Controller" as proj
+  component "Pipeline Service\n(10-stage SSE generator)" as pipe
+  component "Export Service\n(IEEE 830 assembly)" as exp
+}
+
+rectangle "AI Providers" #FBF4EA {
+  component "Groq\n(llama-3.3-70b)\nStages 1-9" as groq
+  component "Google Gemini\n(2.5 Flash-Lite)\nStage 10 - UI code" as gemini
+}
+
+rectangle "Data Layer" #F3EAFB {
+  database "Neon PostgreSQL\nusers, projects,\nartifacts, pipeline_stages,\nrefresh_tokens, exports" as db
+}
+
+rectangle "Export Renderers" #FBEAF1 {
+  component "pdfkit / docx.js /\ncsv-writer / resvg-js\n(PDF, DOCX, CSV, LaTeX)" as render
+}
+
+user --> spa
+spa --> axios
+axios --> auth : HTTPS /api
+axios --> proj : HTTPS /api
+axios ..> pipe : SSE /generate?token
+
+auth --> db
+proj --> db
+pipe --> db
+pipe --> groq
+pipe --> gemini
+proj --> exp
+exp --> db
+exp --> render
+
+note bottom of spa
+  Deployed on Vercel
+end note
+note bottom of auth
+  Deployed on Render
+end note
+@enduml

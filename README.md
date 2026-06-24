@@ -1,6 +1,6 @@
 # Req2UI
 
-> **AASTMT Graduation Project** — Transforms a natural-language software description into a complete set of IEEE-standard software engineering artifacts using a 9-stage AI pipeline.
+> **AASTMT Graduation Project** — Transforms a natural-language software description into a complete set of IEEE-standard software engineering artifacts using a 10-stage AI pipeline.
 
 **Live demo:** [req-2-ui.vercel.app](https://req-2-ui.vercel.app)
 
@@ -8,19 +8,20 @@
 
 ## What it does
 
-Paste a project description and Req2UI streams through 9 pipeline stages, generating:
+Paste a project description and Req2UI streams through 10 pipeline stages, generating:
 
-| # | Artifact | Standard |
-|---|----------|----------|
-| 1 | Requirement extraction | — |
-| 2 | Functional requirements | IEEE 830 |
-| 3 | Non-functional requirements | IEEE 830 |
-| 4 | Security requirements | OWASP Top 10 (2021) |
-| 5 | Functional test cases | IEEE 829 |
-| 6 | Security test cases | — |
-| 7 | UI wireframe descriptions | — |
-| 8 | UML diagrams (Use Case, Class, Sequence) | UML 2.x / Mermaid.js |
-| 9 | Traceability matrix | — |
+| # | Artifact | Standard | LLM |
+|---|----------|----------|-----|
+| 1 | Requirement extraction + SRS narrative | — | Groq |
+| 2 | Functional requirements | IEEE 830 | Groq |
+| 3 | Non-functional requirements | IEEE 830 | Groq |
+| 4 | Security requirements | OWASP Top 10 (2021) | Groq |
+| 5 | Functional test cases | IEEE 829 | Groq |
+| 6 | Security test cases | — | Groq |
+| 7 | UI wireframe descriptions | — | Groq |
+| 8 | Traceability matrix | — | Groq |
+| 9 | UML diagrams (Use Case, Class, Sequence) | UML 2.x / Mermaid.js | Groq |
+| 10 | UI code (HTML + Tailwind, per screen) | — | Gemini |
 
 Artifacts are viewable in an IEEE 830-structured SRS document tab and individually, with export to **PDF**, **DOCX**, **CSV**, and **LaTeX**.
 
@@ -30,7 +31,7 @@ Artifacts are viewable in an IEEE 830-structured SRS document tab and individual
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 18, TypeScript, Tailwind CSS v4, Vite |
+| Frontend | React 19, TypeScript, Tailwind CSS v4, Vite |
 | Backend | Node.js 22, Express, TypeScript |
 | Database | PostgreSQL (Neon serverless) |
 | Auth | JWT (15 min access) + Refresh tokens + httpOnly cookies |
@@ -92,7 +93,7 @@ REQ2UI/
 │   │   └── services/
 │   │       ├── groq.service.ts      # Groq SDK wrapper (analysis stages)
 │   │       ├── gemini.service.ts    # Gemini SDK wrapper (UI code gen)
-│   │       ├── pipeline.service.ts  # 9-stage orchestrator + SSE
+│   │       ├── pipeline.service.ts  # 10-stage orchestrator + SSE
 │   │       └── export.service.ts    # PDF · DOCX · LaTeX · CSV
 │   └── package.json
 ├── frontend/
@@ -107,9 +108,25 @@ REQ2UI/
 │   │   │   └── ...
 │   │   └── types/
 │   └── vercel.json
+├── thesis/                 # LaTeX graduation thesis + UML figures (see thesis/README.md)
+├── deck/                   # defense presentation (see deck/README.md)
+│   ├── slidev/             #   primary: code-based Slidev deck
+│   └── legacy-pptx/        #   fallback: editable PowerPoint
 ├── render.yaml
 └── README.md
 ```
+
+---
+
+## Thesis & Presentation
+
+Academic deliverables live alongside the code:
+
+| Folder | What | Build |
+|--------|------|-------|
+| [`thesis/`](thesis/) | IEEE 830-structured LaTeX thesis + PlantUML figures | Overleaf (pdfLaTeX) — see `thesis/README.md` |
+| [`deck/slidev/`](deck/slidev/) | Defense deck (Markdown + Slidev), 27 slides | `npm install && npm run export` — see `deck/slidev/README.md` |
+| [`deck/legacy-pptx/`](deck/legacy-pptx/) | Earlier PowerPoint deck (hand-editable fallback) | open in PowerPoint |
 
 ---
 
