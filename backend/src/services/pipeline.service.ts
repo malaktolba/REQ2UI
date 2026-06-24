@@ -140,7 +140,7 @@ async function stageOrCached<T>(
 }
 
 /** Strips code fences / stray whitespace that break Mermaid rendering. */
-function sanitizeMermaid(code: unknown): unknown {
+export function sanitizeMermaid(code: unknown): unknown {
   if (typeof code !== "string") return code;
   return code
     .replace(/^\s*```(?:mermaid)?\s*/i, "") // leading ```mermaid fence
@@ -161,7 +161,7 @@ function sanitizeUmlArtifact(raw: any): any {
 
 // Coarse category for a wireframe screen, used to avoid spending UI-generation
 // slots on near-duplicate pages (e.g. Login vs Register both render the same way).
-function screenCategory(sc: any): string {
+export function screenCategory(sc: any): string {
   const hay = `${sc.name ?? ""} ${sc.route ?? ""} ${sc.description ?? ""}`.toLowerCase();
   const rules: [string, RegExp][] = [
     ["auth", /\b(log[\s-]?in|sign[\s-]?in|sign[\s-]?up|register|registration|forgot|reset|password|authenticate)\b/],
@@ -177,7 +177,7 @@ function screenCategory(sc: any): string {
 }
 
 /** Picks up to `limit` functionally distinct screens, then backfills to reach `limit`. */
-function selectDistinctScreens(screens: any[], limit: number): any[] {
+export function selectDistinctScreens(screens: any[], limit: number): any[] {
   const seen = new Set<string>();
   const picked: any[] = [];
   const leftovers: any[] = [];
