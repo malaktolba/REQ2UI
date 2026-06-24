@@ -128,8 +128,9 @@ router.put("/:id", async (req: Request, res: Response): Promise<void> => {
   }
 
   const { name, description } = parsed.data;
-  // Merge metadata onto whatever is stored so a partial PUT only touches the
-  // keys it sends; omit the param entirely to leave metadata untouched.
+  // When `metadata` is sent the edit form submits the full field set, so we
+  // replace stored metadata with the cleaned object (blank fields are dropped,
+  // letting the user clear a value). Omit the param to leave metadata untouched.
   const metadata = parsed.data.metadata ? cleanMetadata(parsed.data.metadata) : null;
 
   const rows = await sql`
@@ -138,7 +139,7 @@ router.put("/:id", async (req: Request, res: Response): Promise<void> => {
       name = COALESCE(${name ?? null}, name),
       description = COALESCE(${description ?? null}, description),
       metadata = CASE WHEN ${metadata !== null}
-                   THEN metadata || ${JSON.stringify(metadata ?? {})}::jsonb
+                   THEN ${JSON.stringify(metadata ?? {})}::jsonb
                    ELSE metadata END,
       updated_at = NOW()
     WHERE id = ${id}

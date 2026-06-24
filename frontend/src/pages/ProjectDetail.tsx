@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { fetchProject, fetchProjectWithStages, updateProject } from "../api/projects";
-import type { Project, PipelineStage } from "../types/project";
+import type { Project, PipelineStage, ProjectMetadata } from "../types/project";
 import { StatusBadge } from "../components/StatusBadge";
 import { useToast } from "../context/ToastContext";
 import { CheckIcon, XIcon, SpinnerIcon, CircleIcon, ArrowLeft, ArrowRight } from "../components/Icons";
@@ -79,7 +79,17 @@ export default function ProjectDetail() {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [editMeta, setEditMeta] = useState<ProjectMetadata>({});
   const [saving, setSaving] = useState(false);
+
+  const META_FIELDS: { key: keyof ProjectMetadata; label: string; placeholder: string; full?: boolean }[] = [
+    { key: "organization", label: "Organization / company", placeholder: "Acme Corp" },
+    { key: "industry", label: "Industry / domain", placeholder: "Healthcare, Fintech…" },
+    { key: "audience", label: "Target users / audience", placeholder: "Clinicians, patients…", full: true },
+    { key: "author", label: "Prepared by", placeholder: "Account name if blank" },
+    { key: "contact_email", label: "Contact email", placeholder: "Account email if blank" },
+    { key: "version", label: "Document version", placeholder: "1.0" },
+  ];
 
   useEffect(() => {
     if (!id) return;
@@ -165,6 +175,7 @@ export default function ProjectDetail() {
     if (!project) return;
     setEditName(project.name);
     setEditDesc(project.description);
+    setEditMeta(project.metadata ?? {});
     setEditing(true);
   }
 
@@ -172,7 +183,16 @@ export default function ProjectDetail() {
     if (!id || !project) return;
     setSaving(true);
     try {
-      const updated = await updateProject(id, { name: editName.trim(), description: editDesc.trim() });
+      // Send every metadata key (blanks included) so cleared fields are removed
+      // — the backend trims blanks and merges the result onto stored metadata.
+      const metadata = Object.fromEntries(
+        Object.entries(editMeta).map(([k, v]) => [k, (v ?? "").trim()])
+      ) as ProjectMetadata;
+      const updated = await updateProject(id, {
+        name: editName.trim(),
+        description: editDesc.trim(),
+        metadata,
+      });
       setProject(updated);
       setEditing(false);
       toast.success("Project updated.");
@@ -240,6 +260,30 @@ export default function ProjectDetail() {
                 className="w-full bg-slate-800 light:bg-white border border-slate-700 light:border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-300 light:text-slate-700 focus:outline-none focus:border-indigo-500 transition resize-none leading-relaxed"
                 placeholder="Project description"
               />
+
+              {/* Organization & document details (optional) */}
+              <div className="rounded-xl border border-slate-800 light:border-slate-200 p-4">
+                <p className="text-xs font-medium text-slate-400 light:text-slate-600 mb-3">
+                  Organization &amp; document details
+                  <span className="text-slate-600 light:text-slate-400 font-normal"> · optional, enriches the SRS &amp; export title page</span>
+                </p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {META_FIELDS.map((f) => (
+                    <div key={f.key} className={f.full ? "sm:col-span-2" : ""}>
+                      <label className="block text-xs text-slate-500 light:text-slate-500 mb-1">{f.label}</label>
+                      <input
+                        type={f.key === "contact_email" ? "email" : "text"}
+                        value={editMeta[f.key] ?? ""}
+                        onChange={(e) => setEditMeta((m) => ({ ...m, [f.key]: e.target.value }))}
+                        maxLength={400}
+                        className="w-full bg-slate-800 light:bg-white border border-slate-700 light:border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-200 light:text-slate-800 focus:outline-none focus:border-indigo-500 transition"
+                        placeholder={f.placeholder}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex gap-2">
                 <button
                   onClick={handleSaveEdit}
@@ -275,6 +319,27 @@ export default function ProjectDetail() {
                 </button>
               </div>
               <p className="text-slate-400 light:text-slate-600 text-sm leading-relaxed">{project.description}</p>
+              {project.metadata && Object.values(project.metadata).some(Boolean) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {([
+                    ["organization", "Org"],
+                    ["industry", "Industry"],
+                    ["audience", "Users"],
+                    ["author", "By"],
+                    ["version", "v"],
+                  ] as [keyof ProjectMetadata, string][])
+                    .filter(([k]) => project.metadata?.[k])
+                    .map(([k, label]) => (
+                      <span
+                        key={k}
+                        className="inline-flex items-center gap-1 text-xs bg-slate-900 light:bg-slate-100 border border-slate-800 light:border-slate-200 rounded-full px-2.5 py-1 text-slate-400 light:text-slate-600"
+                      >
+                        <span className="text-slate-600 light:text-slate-400">{label}:</span>
+                        {project.metadata![k]}
+                      </span>
+                    ))}
+                </div>
+              )}
             </div>
           )}
 
