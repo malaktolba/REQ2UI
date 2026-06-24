@@ -5,8 +5,8 @@ import { BoltIcon, DocumentIcon, DiagramIcon, ExportIcon, ArrowRight } from "../
 const FEATURES = [
   {
     Icon: BoltIcon,
-    title: "9-Stage AI Pipeline",
-    desc: "From raw description to full IEEE 830 SRS in minutes — extraction, requirements, tests, wireframes, UML, and more.",
+    title: "10-Stage AI Pipeline",
+    desc: "From raw description to full IEEE 830 SRS in minutes — extraction, requirements, tests, wireframes, UML, and live UI code.",
   },
   {
     Icon: DocumentIcon,
@@ -83,7 +83,7 @@ export default function Landing() {
           </h1>
 
           <p className="text-slate-400 text-lg sm:text-xl max-w-xl mb-10 leading-relaxed">
-            Paste a project description. Req2UI runs a 9-stage AI pipeline and delivers a complete SRS document, UML diagrams, and test cases — export-ready in minutes.
+            Paste a project description. Req2UI runs a 10-stage AI pipeline and delivers a complete SRS document, UML diagrams, test cases, and live UI code — export-ready in minutes.
           </p>
 
           <div className="flex items-center gap-4 flex-wrap justify-center">
@@ -116,7 +116,7 @@ export default function Landing() {
         <div className="text-center mb-16">
           <h2 className="text-3xl font-bold mb-3">Everything you need, generated</h2>
           <p className="text-slate-400 text-base max-w-md mx-auto">
-            One description. Nine AI stages. A complete software specification package.
+            One description. Ten AI stages. A complete software specification package.
           </p>
         </div>
 
