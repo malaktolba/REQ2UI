@@ -1,5 +1,5 @@
 import { sql } from "../db/client";
-import { callGroq } from "./groq.service";
+import { callGroq, GROQ_HEAVY, GROQ_LIGHT } from "./groq.service";
 import { callGeminiJSON, callGeminiText } from "./gemini.service";
 
 export interface StageEvent {
@@ -41,6 +41,23 @@ const STAGE_MAX_TOKENS = [
   6000, // 7  UI Wireframe Descriptions
   4000, // 8  Traceability Matrix
   4000, // 9  UML Diagrams
+];
+
+// Preferred model per stage (indexed by stage number - 1). Easier, highly
+// structured/derivative stages run on the lighter model — which has far more
+// generous rate limits — to conserve the heavy model's scarce daily quota for
+// the stages that genuinely need its reasoning (prose, foundations, UML syntax).
+// The Groq client still falls back across model tiers if one is rate-limited.
+const STAGE_MODEL = [
+  GROQ_HEAVY, // 1  Requirement Extraction + SRS narrative (prose quality)
+  GROQ_HEAVY, // 2  Functional Requirements (everything downstream derives from it)
+  GROQ_LIGHT, // 3  Non-Functional Requirements (structured/templated)
+  GROQ_LIGHT, // 4  Security Requirements (mapped to known OWASP categories)
+  GROQ_HEAVY, // 5  Functional Test Cases (largest JSON stage — quality/validity matters)
+  GROQ_LIGHT, // 6  Security Test Cases (derivative from SRs)
+  GROQ_HEAVY, // 7  UI Wireframe Descriptions (creative; feeds UI generation)
+  GROQ_LIGHT, // 8  Traceability Matrix (pure linking/lookup — easiest)
+  GROQ_HEAVY, // 9  UML Diagrams (strict Mermaid syntax; weak models break it)
 ];
 
 async function upsertStage(
@@ -87,11 +104,12 @@ async function runStage<T>(
 ): Promise<T> {
   const name = STAGE_NAMES[stageNum - 1];
   const cap = maxTokens ?? STAGE_MAX_TOKENS[stageNum - 1] ?? 8000;
+  const model = STAGE_MODEL[stageNum - 1] ?? GROQ_HEAVY;
   emit({ stage: stageNum, name, status: "running" });
   await upsertStage(projectId, stageNum, "running");
 
   try {
-    const raw = await callGroq(system, user, cap);
+    const raw = await callGroq(system, user, cap, model);
     const result = transform ? transform(raw) : raw;
     await upsertArtifact(projectId, artifactType, result);
     await upsertStage(projectId, stageNum, "completed");
