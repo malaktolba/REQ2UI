@@ -119,7 +119,7 @@ export default function Landing() {
           </h1>
 
           <p
-            className="animate-fade-up font-display font-bold tracking-tight text-3xl sm:text-4xl lg:text-5xl text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-indigo-400 to-cyan-200 mb-6"
+            className="animate-fade-up font-display font-bold tracking-tight text-3xl sm:text-4xl lg:text-5xl text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-indigo-400 to-cyan-200 light:from-indigo-500 light:via-indigo-400 light:to-indigo-600 mb-6"
             style={{ animationDelay: "0.12s" }}
           >
             Requirements, engineered.
