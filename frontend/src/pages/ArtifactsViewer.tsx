@@ -1620,7 +1620,7 @@ export default function ArtifactsViewer() {
             ) : (
               <button
                 onClick={handleGenerateUI}
-                className="border border-slate-700 hover:border-indigo-500/60 text-slate-300 hover:text-white font-medium px-4 py-2 rounded-lg transition text-sm flex items-center gap-1.5"
+                className="border border-line bg-surface/50 hover:bg-surface hover:border-indigo-500/60 text-muted hover:text-ink font-medium px-4 py-2 rounded-lg transition text-sm flex items-center gap-1.5"
               >
                 ↻ Regenerate UI Code
               </button>
