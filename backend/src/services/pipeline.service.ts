@@ -285,15 +285,32 @@ export function buildAccentScale(baseHex: string): Record<string, string> {
 
 /**
  * The brand accent is always emitted as Tailwind's `indigo-*` utilities so the
- * preview's instant-recolor (which remaps `indigo`) keeps working. When the user
- * picked a custom primary colour we *redefine* the indigo scale to that colour
- * via the Play-CDN config, so `indigo-600` literally renders as their colour.
- * Code owns this script (not the LLM) for deterministic, always-valid output.
+ * preview's instant-recolor (which remaps `indigo`) keeps working. We *redefine*
+ * the indigo scale to the generation's chosen accent via the Play-CDN config, so
+ * `indigo-600` literally renders as that colour. Code owns this script (not the
+ * LLM) for deterministic, always-valid output. Pass the resolved accent hex
+ * (see pickDesignDirection); an unparseable hex falls back to the indigo default.
  */
-export function accentConfigScript(prefs?: UIPreferences): string {
-  const custom = prefs?.color_mode === "custom" ? prefs.primary_color?.trim() : "";
-  const scale = custom ? buildAccentScale(custom) : DEFAULT_INDIGO;
+export function accentConfigScript(accentHex?: string): string {
+  const scale = accentHex ? buildAccentScale(accentHex) : DEFAULT_INDIGO;
   return `<script>tailwind.config={theme:{extend:{colors:{indigo:${JSON.stringify(scale)}}}}}</script>`;
+}
+
+// ── Accent resolution ───────────────────────────────────────────────────────
+// The MODEL chooses the brand accent (it knows the product domain, so it can pick
+// a fitting, distinctive colour rather than the same indigo every time). Code's
+// only job is to turn that choice into the `indigo-*` scale remap so the preview's
+// instant-recolor and the custom-colour feature keep working. Resolution order:
+// an explicit user custom colour wins; otherwise the model's hex (if valid);
+// otherwise the indigo default as a last resort.
+const INDIGO_FALLBACK = "#6366f1";
+
+export function resolveAccentHex(prefs?: UIPreferences, modelHex?: string): string {
+  if (prefs?.color_mode === "custom" && prefs.primary_color?.trim()) {
+    return prefs.primary_color.trim();
+  }
+  const hex = (modelHex ?? "").trim();
+  return hexToRgb(hex) ? hex : INDIGO_FALLBACK;
 }
 
 /**
@@ -405,21 +422,28 @@ async function generateUICodeMultipass(
       .map((sc: any) => `${sc.name}: ${sc.route ?? "/" + sc.id.toLowerCase()}`)
       .join(" | ");
 
-    // The brand accent is owned by code (deterministic, valid) — when the user
-    // picked a custom primary colour it redefines Tailwind's `indigo` scale.
-    const accentScript = accentConfigScript(uiPreferences);
-
-    // ── Pass 1: Design system — navbar, footer, plus a reusable component
-    //    class kit + shared sample data so every screen stays consistent.
-    //    Uses Gemini → Groq → hardcoded-default fallback so traffic spikes on
-    //    Gemini never abort the stage. ───────────────────────────────────────
+    // ── Pass 1: Design system — the model invents a visual identity that fits
+    //    THIS product (theme, neutral family, brand accent, shape/depth) plus the
+    //    navbar, footer, reusable component kit, and shared sample data. We don't
+    //    prescribe colours — the model picks them; code only turns the chosen
+    //    accent into the `indigo` remap afterward. Uses Gemini → Groq → hardcoded
+    //    default fallback so traffic spikes on Gemini never abort the stage. ────
     const designSystem = await designSystemWithFallback(
-      `You are a senior UI designer. Create a cohesive HTML design system + reusable component class kit for a web app.
+      `You are a senior product designer. Invent a cohesive, DISTINCTIVE visual identity for THIS specific web app, then express it as an HTML design system + reusable component class kit.
+
+First, choose a design language that genuinely fits the product's domain and audience — do NOT default to a generic dark dashboard or the same colours every time:
+- Choose LIGHT or DARK, whichever suits the product.
+- Choose a Tailwind NEUTRAL family for backgrounds/text/borders: slate, zinc, stone, gray, or neutral.
+- Choose a distinctive BRAND ACCENT colour (as a hex value) that fits the domain — e.g. trustworthy blues/teals for finance & healthcare, energetic warm tones for consumer/social, refined violets for premium products, fresh greens for sustainability/wellness. Pick something intentional, not a default.
+- Choose the shape language (corner radius), depth (flat vs soft-shadow vs glass), and density.
+
 Return a JSON object with exactly this shape:
 {
+  "accent_hex": "#rrggbb — the brand accent colour you chose",
+  "theme_summary": "1–2 sentences describing the look you chose (light/dark, mood, neutral family, shape & depth) — every screen will follow this",
   "navbar": "<full navbar HTML using Tailwind classes>",
   "footer": "<footer HTML using Tailwind classes>",
-  "body_classes": "bg-slate-950 text-slate-100 min-h-screen flex flex-col",
+  "body_classes": "<the <body> classes implementing your theme, e.g. dark: bg-zinc-950 text-zinc-100 min-h-screen flex flex-col — light: bg-stone-50 text-stone-900 min-h-screen flex flex-col>",
   "components": {
     "button_primary": "<exact Tailwind class string for a primary button>",
     "button_secondary": "<class string for a secondary/ghost button>",
@@ -435,10 +459,13 @@ Return a JSON object with exactly this shape:
   "sample_data": { "<entity>": [ { "<field>": "<value>" } ] }
 }
 
-Design rules:
-- Dark theme by default: bg-slate-950 page, bg-slate-900 surfaces, slate-800 borders, indigo-600 as the brand/primary accent
-- The component class strings are the SINGLE source of truth — every screen reuses them verbatim so the whole app looks consistent. Make each one complete: colour, padding, radius, border, hover/focus, transition.
-- Navbar: fixed top, logo left, navigation links center/right, user avatar right
+ACCENT COLOUR — IMPORTANT:
+- In all the HTML you output, express the brand accent ONLY with Tailwind \`indigo-*\` utilities (indigo-600 primary, indigo-500/400 for hovers/highlights). At runtime these are remapped to your chosen accent_hex, so the page renders in YOUR colour. Do NOT use any other Tailwind colour name (violet/blue/emerald/etc.) for the accent — only \`indigo-*\`.
+- Use your chosen neutral family for all backgrounds, surfaces, text, and borders.
+
+Rules:
+- The component class strings are the SINGLE source of truth — every screen reuses them verbatim so the whole app looks consistent. Make each one complete: colour, padding, radius, border, hover/focus, transition, and matched to your chosen design language.
+- Navbar: fixed top, logo left, navigation links center/right, user avatar right — styled for your theme.
 - Navigation links must include ALL these screens: ${routeMap}
 - Footer: simple 1-line with project name and copyright
 - Use real, project-appropriate link text (not placeholders)
@@ -448,6 +475,16 @@ Design rules:
       stageName,
       total
     );
+
+    // The model picked the accent; code turns it into the deterministic `indigo`
+    // remap (custom-colour preference still overrides). A short, model-written
+    // theme summary keeps every per-screen page on the same aesthetic.
+    const accentScript = accentConfigScript(resolveAccentHex(uiPreferences, designSystem.accent_hex));
+    const themeSummary: string =
+      typeof designSystem.theme_summary === "string" && designSystem.theme_summary.trim()
+        ? designSystem.theme_summary.trim()
+        : "Clean, modern, consistent — follow the navbar, footer, body theme, and component classes exactly.";
+    const defaultBodyClasses = "bg-slate-950 text-slate-100 min-h-screen flex flex-col";
 
     const kit = (designSystem.components ?? {}) as Record<string, unknown>;
     const componentKit = Object.entries(kit)
@@ -490,14 +527,16 @@ Design rules:
             .join("\n");
           const frs = frByScreen[sc.id]?.join("\n") ?? "";
 
-          const systemPrompt = `You are an expert frontend developer. Generate a COMPLETE, polished, production-quality HTML page.
+          const systemPrompt = `You are an expert frontend developer. Generate a COMPLETE, polished, production-quality HTML page that feels hand-crafted for THIS screen — not a generic template.
 
-DESIGN SYSTEM (use exactly as provided — do not restyle):
+DESIGN DIRECTION: ${themeSummary}
+
+DESIGN SYSTEM (shared chrome + component kit — keep the navbar, footer, theme, and component classes consistent with every other screen):
 ${designSystem.navbar ? `Navbar:\n${designSystem.navbar}` : ""}
 ${designSystem.footer ? `Footer:\n${designSystem.footer}` : ""}
-Body classes: ${designSystem.body_classes ?? "bg-slate-950 text-slate-100 min-h-screen flex flex-col"}
+Body classes: ${designSystem.body_classes ?? defaultBodyClasses}
 
-REUSABLE COMPONENT CLASSES (apply these EXACT class strings so every screen is visually consistent):
+REUSABLE COMPONENT CLASSES (apply these EXACT class strings for buttons/inputs/cards/etc. so every screen is visually consistent):
 ${componentKit || "— (none provided; keep styling consistent and minimal)"}
 
 SHARED SAMPLE DATA (reuse these exact records where relevant so the app feels connected):
@@ -510,17 +549,18 @@ CODING RULES:
 1. Output ONLY the complete HTML document — no markdown, no explanation, no code fences
 2. <head> must include, in this order: <script src="https://cdn.tailwindcss.com"></script>, then this EXACT accent config script: ${accentScript}, then <script src="https://unpkg.com/lucide@latest"></script>, then any <style> blocks
 3. <body> must start with the navbar HTML, end with the footer HTML, main content between them
-4. Reuse the component classes above for every button, input, card, badge, and table — do NOT invent new styles for those
-5. Icons: use Lucide via <i data-lucide="icon-name"></i>, and call lucide.createIcons() in a <script> just before </body>
-6. Use realistic, domain-appropriate data (names, numbers, dates) — NOT Lorem Ipsum; prefer the shared sample data above
-7. Every UI component listed must be visually present on the page
-8. Forms: <label> tied to its input via for/id, placeholders, validation attributes; no real submission needed
-9. Tables: realistic sample rows (3–5 rows minimum)
-10. Include relevant states where they apply: a loading skeleton, an empty state, or an error/validation message
-11. Accessibility: semantic landmarks (<header>/<nav>/<main>/<footer>), aria-label on icon-only buttons, labels tied to inputs, and AA-contrast text
-12. Mobile-responsive: use Tailwind responsive prefixes (sm:, md:, lg:)
-13. Hover/focus states on interactive elements
-14. At least one piece of JavaScript for a small interaction (e.g., dropdown, modal toggle, tab switch)${prefsBlock}`;
+4. Reuse the component classes above for buttons, inputs, cards, badges, and tables so the app stays consistent — but DO craft a distinctive, content-rich layout for this specific screen (a strong header/hero where it fits, well-grouped sections, real visual hierarchy and depth). Don't just stack identical generic cards.
+5. Express any accent/brand colour with Tailwind \`indigo-*\` utilities only (remapped to the real brand colour at runtime); use the neutral scale from the body classes for backgrounds/text/borders.
+6. Icons: use Lucide via <i data-lucide="icon-name"></i>, and call lucide.createIcons() in a <script> just before </body>
+7. Use realistic, domain-appropriate data (names, numbers, dates) — NOT Lorem Ipsum; prefer the shared sample data above
+8. Every UI component listed must be visually present on the page
+9. Forms: <label> tied to its input via for/id, placeholders, validation attributes; no real submission needed
+10. Tables: realistic sample rows (3–5 rows minimum)
+11. Include relevant states where they apply: a loading skeleton, an empty state, or an error/validation message
+12. Accessibility: semantic landmarks (<header>/<nav>/<main>/<footer>), aria-label on icon-only buttons, labels tied to inputs, and AA-contrast text
+13. Mobile-responsive: use Tailwind responsive prefixes (sm:, md:, lg:)
+14. Hover/focus states on interactive elements
+15. At least one piece of JavaScript for a small interaction (e.g., dropdown, modal toggle, tab switch)${prefsBlock}`;
 
           const userPrompt = `Screen: ${sc.name}
 Route: ${sc.route ?? ""}

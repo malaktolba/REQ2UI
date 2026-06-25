@@ -4,6 +4,7 @@ import {
   sanitizeMermaid,
   buildAccentScale,
   accentConfigScript,
+  resolveAccentHex,
   htmlLooksComplete,
 } from "../services/pipeline.service";
 
@@ -104,15 +105,30 @@ describe("buildAccentScale", () => {
 });
 
 describe("accentConfigScript", () => {
-  it("emits the standard indigo scale when no custom colour is set", () => {
+  it("emits the standard indigo scale when no accent hex is given", () => {
     expect(accentConfigScript(undefined)).toContain("#6366f1");
-    expect(accentConfigScript({ color_mode: "light" })).toContain("#6366f1");
+    expect(accentConfigScript()).toContain("#6366f1");
   });
 
-  it("redefines indigo to the custom primary colour", () => {
-    const script = accentConfigScript({ color_mode: "custom", primary_color: "#14b8a6" });
+  it("redefines indigo to the supplied accent colour", () => {
+    const script = accentConfigScript("#14b8a6");
     expect(script).toContain("#14b8a6");
     expect(script).toContain("indigo");
+  });
+});
+
+describe("resolveAccentHex", () => {
+  it("uses the model's chosen accent when it is a valid hex", () => {
+    expect(resolveAccentHex(undefined, "#14b8a6")).toBe("#14b8a6");
+  });
+
+  it("lets a user custom colour override the model's choice", () => {
+    expect(resolveAccentHex({ color_mode: "custom", primary_color: "#ff0080" }, "#14b8a6")).toBe("#ff0080");
+  });
+
+  it("falls back to indigo when the model returns nothing usable", () => {
+    expect(resolveAccentHex(undefined, undefined)).toBe("#6366f1");
+    expect(resolveAccentHex(undefined, "not-a-color")).toBe("#6366f1");
   });
 });
 

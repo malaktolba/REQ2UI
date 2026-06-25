@@ -4,25 +4,39 @@ import { timeLLMCall } from "./llm-metrics";
 
 const gemini = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
-// gemini-2.5-flash free tier is tiny (5 req/min AND only 20 req/day), which the
-// multi-call UI stage exhausts quickly. flash-lite has much higher free limits
-// (~15 req/min, far larger daily cap) and is plenty for HTML generation. Override
-// the primary with GEMINI_MODEL (e.g. back to gemini-2.5-flash on a paid tier).
-const MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash-lite";
+// "flash-lite" tiers have the largest free quotas (high RPM + big daily cap) and
+// are plenty for HTML generation, so we lead with the current GA flash-lite. The
+// older gemini-2.0-* models were SHUT DOWN on 2026-06-01 and gemini-2.5-* is
+// legacy (deprecation window mid-2026) — keep 2.5 only as a trailing fallback.
+// Override the primary with GEMINI_MODEL (e.g. a more capable model on a paid tier).
+const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.1-flash-lite";
 
-// Model fallback chain. Gemini frequently returns 503 ("model overloaded" / "high
-// demand") during traffic spikes — that's per-model, so switching to a sibling
-// model (which has its own capacity pool and quota) usually succeeds where a
-// plain backoff on the same model would not. Each model is tried in turn; the
-// chain is deduped so an unset/duplicate GEMINI_MODEL doesn't repeat work.
+// Model fallback chain. Two failure modes drive this:
+//   1. 503 ("model overloaded" / "high demand") during traffic spikes — per-model,
+//      so switching to a sibling (its own capacity pool + quota) often succeeds
+//      where a plain same-model backoff would not.
+//   2. 404 NOT_FOUND when Google deprecates/shuts down a model — non-retryable, so
+//      generate() breaks out and falls straight to the next live model.
+// Ordered newest/cheapest → legacy. Only models confirmed live as of 2026-06 are
+// listed; the chain is deduped so an unset/duplicate GEMINI_MODEL doesn't repeat
+// work. Add new GA models to the front as they ship.
 const MODEL_CHAIN: string[] = Array.from(
   new Set([
     MODEL,
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemini-2.5-flash-lite",
+    "gemini-3.1-flash-lite", // GA, optimized for speed/scale/cost
+    "gemini-3.5-flash",      // GA, recommended replacement for deprecated models
+    "gemini-3-flash-preview",
+    "gemini-2.5-flash-lite", // legacy fallback (deprecating mid-2026)
+    "gemini-2.5-flash",      // legacy fallback
+    "gemini-2.5-pro",        // legacy, most capable — last resort
   ])
 );
+
+// The chain order is fixed, but after the first success we remember the winning
+// model and try it first on subsequent calls. This avoids wasting a throttle
+// cycle (MIN_INTERVAL_MS) hitting a dead/overloaded primary on every single call
+// once we've learned which model actually responds.
+let preferredModel = MODEL;
 
 // Stage 10 fires many calls (design system + one per screen), so we serialize
 // them through a single queue with minimum spacing to stay under the per-minute
@@ -71,9 +85,11 @@ async function generate(
   retries: number
 ): Promise<string> {
   let lastError: unknown;
+  // Try the last model that worked first, then the rest of the chain (deduped).
+  const chain = Array.from(new Set([preferredModel, ...MODEL_CHAIN]));
   // Outer loop: walk the model fallback chain. Inner loop: retry the current
   // model on transient errors (honouring server backoff), then move on.
-  for (const model of MODEL_CHAIN) {
+  for (const model of chain) {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         await throttle();
@@ -96,6 +112,7 @@ async function generate(
         );
         const raw = res.text;
         if (!raw) throw new Error("Empty response from Gemini");
+        preferredModel = model; // remember the winner for the next call
         return raw;
       } catch (err) {
         lastError = err;
