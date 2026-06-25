@@ -25,6 +25,8 @@ Paste a project description and Req2UI streams through 10 pipeline stages, gener
 
 Artifacts are viewable in an IEEE 830-structured SRS document tab and individually, with export to **PDF**, **DOCX**, **CSV**, and **LaTeX**.
 
+While the pipeline runs, the project view streams **live feedback** — an animated progress ring, an elapsed timer, and a per-stage preview that surfaces each artifact (extracted actors, drafted requirements, generated screens) the moment its stage completes. The whole interface follows a consistent "engineering blueprint" design language and **auto-detects the system light/dark theme** (overridable, and remembered between sessions).
+
 ### UI code generation (Stage 10)
 
 Stage 10 is a two-pass Gemini process designed for coherent, realistic prototypes:
@@ -33,7 +35,7 @@ Stage 10 is a two-pass Gemini process designed for coherent, realistic prototype
 - **Shared sample data** — realistic, domain-appropriate records are generated once and threaded through every screen, so the same entities recur and the app feels connected.
 - **Requirement grounding** — each screen's prompt is grounded in its components and the functional requirements relevant to it (with a sensible fallback), plus rules for Lucide icons, accessibility (landmarks, `aria`, AA contrast), responsiveness, and loading/empty/error states.
 - **Deterministic theming** — the accent is owned by code: picking a custom primary colour derives a full 50–900 scale and remaps Tailwind's `indigo`, so the whole app recolours reliably. The preview also offers **instant, no-AI recolor** across accent swatches.
-- **Robustness** — generated HTML is validated for completeness and regenerated once at a larger token budget if truncated.
+- **Robustness & graceful fallback** — generated HTML is validated for completeness and regenerated once at a larger token budget if truncated. To survive Gemini capacity spikes (`503 / model overloaded`), calls escalate through a fallback chain — retry the same model, rotate to sibling Gemini models, then fall back to Groq — and the design system degrades to a built-in default if all else fails. Per-screen generation is fault-isolated (`Promise.allSettled`): a single failed page is skipped and the run is saved as **partial** rather than discarding the screens already produced.
 - **Post-generation refinement** — refine the result with natural-language instructions scoped to a page, several pages, or the whole design system; changes are previewed as a pending revision before being applied, discarded, or rolled back via revision history.
 
 ---
