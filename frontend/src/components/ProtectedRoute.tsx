@@ -1,12 +1,9 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { LoadingScreen } from "./LoadingScreen";
 
 function RouteSpinner() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950">
-      <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  return <LoadingScreen label="Authenticating" />;
 }
 
 export function ProtectedRoute() {

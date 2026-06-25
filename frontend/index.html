@@ -4,7 +4,35 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#4f46e5" />
+    <meta name="theme-color" content="#06b6d4" />
+
+    <!-- Resolve theme before first paint to avoid a flash of the wrong theme.
+         Explicit choice in localStorage wins; otherwise follow the OS. -->
+    <script>
+      (function () {
+        try {
+          var v = localStorage.getItem("req2ui-theme");
+          var light =
+            v === "light" ||
+            (v == null &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: light)").matches);
+          if (light) {
+            document.documentElement.classList.add("light");
+            var m = document.querySelector('meta[name="theme-color"]');
+            if (m) m.setAttribute("content", "#f5f8fc");
+          }
+        } catch (e) {}
+      })();
+    </script>
+
+    <!-- Type system: Archivo (display) · IBM Plex Sans (body) · IBM Plex Mono (IDs/labels) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
 
     <!-- Primary meta -->
     <title>Req2UI — Requirements to a full SRS &amp; live UI in minutes</title>

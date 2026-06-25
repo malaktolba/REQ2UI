@@ -64,6 +64,12 @@ export async function fetchArtifacts(id: string): Promise<Artifact[]> {
   return data.artifacts;
 }
 
+/** Fetch a single artifact by type (used for the live in-progress preview). */
+export async function fetchArtifact(id: string, type: string): Promise<Artifact> {
+  const { data } = await api.get<{ artifact: Artifact }>(`/projects/${id}/artifacts/${type}`);
+  return data.artifact;
+}
+
 // ── AI UI Refinement ──────────────────────────────────────────────────────────
 // (The refine stream itself is opened via EventSource in the component, like
 // generation; these helpers cover the JSON apply/discard/history/suggestions.)

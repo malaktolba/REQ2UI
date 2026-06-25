@@ -2,20 +2,210 @@
 
 @custom-variant light (&:where(.light, .light *));
 
-*, *::before, *::after {
-  box-sizing: border-box;
+/* ============================================================
+   Design tokens — "Engineering Blueprint"
+   Distinctive type system, a single confident cyan accent, and
+   semantic surface/ink colours driven by CSS variables so the
+   whole app themes from one place (dark default, .light override).
+   ============================================================ */
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-display: "Archivo", "IBM Plex Sans", ui-sans-serif, sans-serif;
+
+  /* Re-map Tailwind's `indigo` scale to the blueprint cyan accent. Every
+     existing `indigo-*` utility across the app instantly adopts the new
+     accent — no per-file edits required. */
+  --color-indigo-50:  #ecfeff;
+  --color-indigo-100: #cffafe;
+  --color-indigo-200: #a6f0fb;
+  --color-indigo-300: #67e3f5;
+  --color-indigo-400: #22d3ee;
+  --color-indigo-500: #06b6d4;
+  --color-indigo-600: #0596b8;
+  --color-indigo-700: #0c788f;
+  --color-indigo-800: #155e75;
+  --color-indigo-900: #164e63;
+  --color-indigo-950: #08323f;
 }
+
+/* Semantic, theme-aware tokens (resolved at runtime so `.light` swaps them). */
+@theme inline {
+  --color-canvas:    var(--canvas);
+  --color-surface:   var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line:      var(--line);
+  --color-ink:       var(--ink);
+  --color-muted:     var(--muted);
+  --color-faint:     var(--faint);
+  --color-marker:    var(--marker);
+}
+
+:root {
+  color-scheme: dark;
+  --canvas:    #080c15;
+  --surface:   #0e1525;
+  --surface-2: #131d31;
+  --line:      #1e2a42;
+  --ink:       #e9eef7;
+  --muted:     #93a1b8;
+  --faint:     #5b6678;
+  --marker:    #fbbf24;
+  --grid-line: rgba(125, 211, 252, 0.05);
+  --grain-opacity: 0.035;
+}
+
+.light {
+  color-scheme: light;
+  /* Tinted canvas so white surfaces/cards visibly lift off the background. */
+  --canvas:    #e9eef6;
+  --surface:   #ffffff;
+  --surface-2: #dde6f1;
+  /* Borders dark enough to actually read as edges on a light canvas. */
+  --line:      #c2d0e0;
+  --ink:       #0b1626;
+  --muted:     #44546b;   /* ~7:1 on canvas  */
+  --faint:     #5d6b80;   /* ~4.6:1 on canvas — readable for mono labels */
+  --marker:    #b45309;
+  --grid-line: rgba(15, 42, 77, 0.06);
+  --grain-opacity: 0.018;
+
+  /* The cyan accent is tuned for a dark canvas — its light shades are unreadable
+     as text/icons on white. Override the ramp so accent TEXT (300/400) is a deep
+     cyan with real contrast, while the button/border accent (500) stays vibrant. */
+  --color-indigo-300: #155e75;  /* cyan-800 — accent text on tinted chips */
+  --color-indigo-400: #0e7490;  /* cyan-700 — primary accent text/icons (~5:1) */
+  --color-indigo-500: #0891b2;  /* cyan-600 — buttons, borders, focus ring */
+  --color-indigo-600: #0e7490;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
+  background-color: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Display type for headings by default; pages can still opt into font-mono. */
+h1, h2, h3, h4 { font-family: var(--font-display); }
+
+/* ---- Blueprint backdrop: a faint grid + film grain behind all content ---- */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+/* Grid lines */
+body::before {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 36px 36px;
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 0%, #000 35%, transparent 100%);
+          mask-image: radial-gradient(120% 90% at 50% 0%, #000 35%, transparent 100%);
+}
+/* Film grain (SVG turbulence) */
+body::after {
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---- Focus, selection, scrollbar ---- */
+:focus-visible {
+  outline: 2px solid var(--color-indigo-500);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+::selection {
+  background: color-mix(in srgb, var(--color-indigo-500) 32%, transparent);
+  color: var(--ink);
+}
+
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: content-box; }
+
+/* ---- Motion ---- */
 @keyframes slideIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes loadbar {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-up { animation: fadeUp 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.animate-blink { animation: blink 1.1s steps(1) infinite; }
+.animate-loadbar { animation: loadbar 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+
+/* shimmering text/skeleton sweep (used on the active pipeline stage) */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 0%, var(--muted) 35%,
+    var(--ink) 50%,
+    var(--muted) 65%, var(--muted) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  animation: shimmer 2.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up, .animate-blink, .animate-loadbar, .shimmer { animation: none; }
+  .shimmer { color: var(--ink); }
+}
+
+/* ---- Small helpers ---- */
+.font-display { font-family: var(--font-display); }
+.mono-label {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+.bp-frame {
+  /* corner-ticked "drawing" frame used on hero/feature panels */
+  position: relative;
+}
+.bp-frame::before,
+.bp-frame::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: var(--color-indigo-500);
+  opacity: 0.7;
+}
+.bp-frame::before { top: -1px; left: -1px; border-top: 1px solid; border-left: 1px solid; }
+.bp-frame::after  { bottom: -1px; right: -1px; border-bottom: 1px solid; border-right: 1px solid; }
 
 .scrollbar-none::-webkit-scrollbar { display: none; }
 .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }

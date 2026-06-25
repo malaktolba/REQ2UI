@@ -7,6 +7,7 @@ import { ArrowLeft, ChevronDown } from "../components/Icons";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { UIPreferencesForm, UIPreferencesSummary } from "../components/UIPreferencesForm";
 import { cleanPreferences, summarizePreferences } from "../config/uiPreferences";
+import { Button, Input, Textarea, Label, Logo, Kicker } from "../components/ui";
 
 // Worked examples that demonstrate good input: each fills in a project name and
 // a detailed, multi-faceted description (purpose, users, features, constraints)
@@ -195,19 +196,20 @@ export default function CreateProject() {
     { key: "version", label: "Document version", placeholder: "1.0" },
   ];
 
+  const panelHeader =
+    "w-full flex items-center justify-between px-4 py-3 text-left bg-surface-2/50 hover:bg-surface-2 transition";
+
   return (
-    <div className="min-h-screen bg-slate-950 light:bg-white text-white light:text-slate-900 flex flex-col transition-colors">
-      <header className="border-b border-slate-800 light:border-slate-200 bg-slate-900/60 light:bg-white/90 backdrop-blur sticky top-0 z-10">
+    <div className="min-h-screen text-ink flex flex-col">
+      <header className="border-b border-line bg-canvas/70 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-4">
-          <Link to="/" className="text-xl font-bold text-white light:text-slate-900 tracking-tight">
-            Req<span className="text-indigo-400 light:text-indigo-600">2</span>UI
-          </Link>
-          <span className="text-slate-700 light:text-slate-300 text-lg font-light">/</span>
-          <Link to="/dashboard" className="text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900 transition text-sm flex items-center gap-1">
+          <Link to="/"><Logo size="sm" /></Link>
+          <span className="text-faint text-lg font-light">/</span>
+          <Link to="/dashboard" className="text-muted hover:text-ink transition text-sm flex items-center gap-1">
             <ArrowLeft size={14} /> Dashboard
           </Link>
-          <span className="text-slate-700 light:text-slate-300 text-lg font-light">/</span>
-          <span className="text-slate-300 light:text-slate-700 text-sm font-medium">New Project</span>
+          <span className="text-faint text-lg font-light">/</span>
+          <span className="mono-label text-[10px] text-ink">New Project</span>
           <div className="ml-auto">
             <ThemeToggle />
           </div>
@@ -216,87 +218,67 @@ export default function CreateProject() {
 
       <main className="max-w-2xl mx-auto px-6 py-12 flex-1 w-full">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">
-            New{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
-              Project
-            </span>
-          </h1>
-          <p className="text-slate-400 light:text-slate-500 leading-relaxed">
+          <Kicker className="mb-3">define</Kicker>
+          <h1 className="text-3xl font-bold tracking-tight mb-2">New project</h1>
+          <p className="text-muted leading-relaxed">
             Describe your software system. Be as detailed as possible — better input means better requirements.
           </p>
         </div>
 
         {error && (
-          <div className="bg-red-500/10 light:bg-red-50 border border-red-500/30 light:border-red-200 text-red-400 light:text-red-600 text-sm px-4 py-3 rounded-xl mb-6">
+          <div className="bg-red-500/10 border border-red-500/30 text-red-400 light:text-red-600 text-sm px-4 py-3 rounded-lg mb-6">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-slate-300 light:text-slate-700 mb-1.5">Project name</label>
-            <input
-              type="text"
-              required
-              maxLength={200}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full bg-slate-800/80 light:bg-slate-50 border border-slate-700 light:border-slate-300 rounded-xl px-4 py-2.5 text-white light:text-slate-900 placeholder-slate-500 light:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-              placeholder="My Software System"
-            />
+            <Label htmlFor="proj-name">Project name</Label>
+            <Input id="proj-name" type="text" required maxLength={200} value={name} onChange={(e) => setName(e.target.value)} placeholder="My Software System" />
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-sm font-medium text-slate-300 light:text-slate-700">Description</label>
-              <span className={`text-xs ${description.length > MAX_DESC * 0.9 ? "text-yellow-400" : "text-slate-600 light:text-slate-400"}`}>
+              <Label>Description</Label>
+              <span className={`mono-label text-[10px] ${description.length > MAX_DESC * 0.9 ? "text-amber-400" : "text-faint"}`}>
                 {description.length}/{MAX_DESC}
               </span>
             </div>
-            <textarea
+            <Textarea
               required
               minLength={10}
               maxLength={MAX_DESC}
               rows={8}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full bg-slate-800/80 light:bg-slate-50 border border-slate-700 light:border-slate-300 rounded-xl px-4 py-3 text-white light:text-slate-900 placeholder-slate-500 light:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition resize-none"
               placeholder="Describe your system in detail — its purpose, users, main features, and any constraints…"
             />
           </div>
 
           {/* Optional organization & document details */}
-          <div className="border border-slate-800 light:border-slate-200 rounded-xl overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setShowDetails((s) => !s)}
-              className="w-full flex items-center justify-between px-4 py-3 text-left bg-slate-900/60 light:bg-slate-50 hover:bg-slate-900 light:hover:bg-slate-100 transition"
-            >
-              <span className="text-sm font-medium text-slate-300 light:text-slate-700">
+          <div className="border border-line rounded-xl overflow-hidden">
+            <button type="button" onClick={() => setShowDetails((s) => !s)} className={panelHeader}>
+              <span className="text-sm font-medium text-ink">
                 Organization &amp; document details
-                <span className="text-slate-600 light:text-slate-400 font-normal"> · optional</span>
+                <span className="text-faint font-normal"> · optional</span>
               </span>
-              <ChevronDown
-                size={16}
-                className={`text-slate-500 transition-transform ${showDetails ? "rotate-180" : ""}`}
-              />
+              <ChevronDown size={16} className={`text-muted transition-transform ${showDetails ? "rotate-180" : ""}`} />
             </button>
 
             {showDetails && (
-              <div className="p-4 grid sm:grid-cols-2 gap-4 border-t border-slate-800 light:border-slate-200">
-                <p className="sm:col-span-2 text-xs text-slate-500 light:text-slate-400 leading-relaxed -mb-1">
+              <div className="p-4 grid sm:grid-cols-2 gap-4 border-t border-line">
+                <p className="sm:col-span-2 text-xs text-muted leading-relaxed -mb-1">
                   Adds client and audience context to enrich the generated SRS, and appears on the exported title page. Leave any field blank to skip it.
                 </p>
                 {META_FIELDS.map((f) => (
                   <div key={f.key} className={f.full ? "sm:col-span-2" : ""}>
-                    <label className="block text-xs font-medium text-slate-400 light:text-slate-600 mb-1">{f.label}</label>
-                    <input
+                    <Label htmlFor={`meta-${f.key}`}>{f.label}</Label>
+                    <Input
+                      id={`meta-${f.key}`}
                       type={f.type ?? "text"}
                       value={meta[f.key] ?? ""}
                       onChange={(e) => setMetaField(f.key)(e.target.value)}
                       maxLength={400}
-                      className="w-full bg-slate-800/80 light:bg-slate-50 border border-slate-700 light:border-slate-300 rounded-lg px-3 py-2 text-sm text-white light:text-slate-900 placeholder-slate-500 light:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                       placeholder={f.placeholder}
                     />
                   </div>
@@ -306,25 +288,18 @@ export default function CreateProject() {
           </div>
 
           {/* Optional UI design preferences */}
-          <div className="border border-slate-800 light:border-slate-200 rounded-xl overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setShowPrefs((s) => !s)}
-              className="w-full flex items-center justify-between px-4 py-3 text-left bg-slate-900/60 light:bg-slate-50 hover:bg-slate-900 light:hover:bg-slate-100 transition"
-            >
-              <span className="text-sm font-medium text-slate-300 light:text-slate-700">
+          <div className="border border-line rounded-xl overflow-hidden">
+            <button type="button" onClick={() => setShowPrefs((s) => !s)} className={panelHeader}>
+              <span className="text-sm font-medium text-ink">
                 UI Design Preferences
-                <span className="text-slate-600 light:text-slate-400 font-normal"> · optional</span>
+                <span className="text-faint font-normal"> · optional</span>
               </span>
-              <ChevronDown
-                size={16}
-                className={`text-slate-500 transition-transform ${showPrefs ? "rotate-180" : ""}`}
-              />
+              <ChevronDown size={16} className={`text-muted transition-transform ${showPrefs ? "rotate-180" : ""}`} />
             </button>
 
             {showPrefs && (
-              <div className="p-4 border-t border-slate-800 light:border-slate-200 space-y-5">
-                <p className="text-xs text-slate-500 light:text-slate-400 leading-relaxed">
+              <div className="p-4 border-t border-line space-y-5">
+                <p className="text-xs text-muted leading-relaxed">
                   Customize how the generated interface should look and feel. Leave empty for AI-generated design decisions.
                 </p>
                 <UIPreferencesForm value={prefs} onChange={setPrefs} />
@@ -336,9 +311,9 @@ export default function CreateProject() {
           {prefSummary.length > 0 && <UIPreferencesSummary lines={prefSummary} />}
 
           <div>
-            <p className="text-xs text-slate-600 light:text-slate-400 mb-2 uppercase tracking-wider font-medium">
+            <p className="mono-label text-[11px] text-muted mb-2">
               Try an example
-              <span className="ml-2 normal-case tracking-normal text-slate-700 light:text-slate-400 font-normal">— fills in a detailed brief you can edit</span>
+              <span className="ml-2 normal-case tracking-normal text-faint">— fills in a detailed brief you can edit</span>
             </p>
             <div className="grid sm:grid-cols-2 gap-2">
               {EXAMPLE_PROMPTS.map((ex) => (
@@ -355,31 +330,25 @@ export default function CreateProject() {
                     setShowDetails(true);
                     setShowPrefs(true);
                   }}
-                  className="group text-left bg-slate-900 light:bg-slate-50 border border-slate-800 light:border-slate-200 hover:border-indigo-500/50 light:hover:border-indigo-300 rounded-xl px-4 py-3 transition"
+                  className="group text-left bg-surface border border-line hover:border-indigo-500/50 rounded-xl px-4 py-3 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-base leading-none">{ex.emoji}</span>
-                    <span className="text-sm font-medium text-slate-300 light:text-slate-700 group-hover:text-white light:group-hover:text-slate-900 transition">
-                      {ex.title}
-                    </span>
+                    <span className="text-sm font-medium text-ink/90 group-hover:text-ink transition">{ex.title}</span>
                   </div>
-                  <p className="mt-1 text-xs text-slate-500 light:text-slate-500 leading-relaxed">{ex.tagline}</p>
+                  <p className="mt-1 text-xs text-muted leading-relaxed">{ex.tagline}</p>
                 </button>
               ))}
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading || name.length < 1 || description.length < 10}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition shadow-lg shadow-indigo-900/40 light:shadow-indigo-100"
-          >
+          <Button type="submit" disabled={loading || name.length < 1 || description.length < 10} className="w-full">
             {loading ? "Creating…" : "Create project"}
-          </button>
+          </Button>
         </form>
       </main>
 
-      <footer className="border-t border-slate-800 light:border-slate-200 py-6 text-center text-slate-700 light:text-slate-400 text-xs">
+      <footer className="border-t border-line py-6 text-center mono-label text-[10px] text-faint">
         Req2UI · AASTMT Graduation Project · {new Date().getFullYear()}
       </footer>
     </div>

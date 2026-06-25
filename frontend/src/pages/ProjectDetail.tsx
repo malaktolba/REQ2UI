@@ -8,6 +8,11 @@ import { CheckIcon, XIcon, SpinnerIcon, CircleIcon, ArrowLeft, ArrowRight } from
 import { ThemeToggle } from "../components/ThemeToggle";
 import { UIPreferencesForm, UIPreferencesSummary } from "../components/UIPreferencesForm";
 import { cleanPreferences, summarizePreferences } from "../config/uiPreferences";
+import { Button, Input, Textarea, Label, Logo, Kicker, buttonClass } from "../components/ui";
+import { LoadingScreen } from "../components/LoadingScreen";
+import { GenerationProgress } from "../components/GenerationProgress";
+import { LiveArtifactPreview } from "../components/LiveArtifactPreview";
+import { AnimatePresence, motion } from "motion/react";
 
 const STAGE_NAMES = [
   "Requirement Extraction",
@@ -34,10 +39,20 @@ function humanizeGenError(raw: string): string {
 }
 
 function StageIcon({ status }: { status: string }) {
-  if (status === "completed") return <CheckIcon size={15} className="text-green-400" />;
-  if (status === "running")   return <SpinnerIcon size={15} className="text-yellow-400 animate-spin" />;
+  if (status === "completed")
+    return (
+      <motion.span
+        initial={{ scale: 0, rotate: -30 }}
+        animate={{ scale: 1, rotate: 0 }}
+        transition={{ type: "spring", stiffness: 500, damping: 18 }}
+        className="inline-flex"
+      >
+        <CheckIcon size={15} className="text-indigo-400" />
+      </motion.span>
+    );
+  if (status === "running")   return <SpinnerIcon size={15} className="text-amber-400 animate-spin" />;
   if (status === "failed")    return <XIcon size={15} className="text-red-400" />;
-  return <CircleIcon size={15} className="text-slate-600" />;
+  return <CircleIcon size={15} className="text-faint" />;
 }
 
 function StageRow({ stage, name, status, detail, progress }: {
@@ -48,24 +63,34 @@ function StageRow({ stage, name, status, detail, progress }: {
   progress?: { current: number; total: number };
 }) {
   const showSub = status === "running" && (detail || progress);
+  const running = status === "running";
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-slate-800 light:border-slate-200 last:border-0">
+    <motion.div
+      layout
+      animate={running ? { backgroundColor: "color-mix(in srgb, var(--color-indigo-500) 7%, transparent)" } : { backgroundColor: "rgba(0,0,0,0)" }}
+      transition={{ duration: 0.4 }}
+      className="flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg border-b border-line last:border-0"
+    >
       <span className="w-5 flex justify-center flex-shrink-0">
         <StageIcon status={status} />
       </span>
-      <span className="text-xs text-slate-500 w-5">{stage}</span>
+      <span className="mono-label text-[10px] text-faint w-5">{stage}</span>
       <div className="min-w-0">
-        <span className={`text-sm ${status === "completed" ? "text-slate-300 light:text-slate-700" : status === "running" ? "text-yellow-300 light:text-yellow-600" : "text-slate-500"}`}>
+        <span className={`text-sm transition-colors ${status === "completed" ? "text-ink/80" : running ? "text-amber-400" : "text-faint"}`}>
           {name}
         </span>
         {showSub && (
-          <span className="block text-xs text-slate-500 truncate">
+          <motion.span
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="block text-xs text-muted truncate"
+          >
             {detail}
             {progress && progress.total > 0 ? ` · ${progress.current}/${progress.total}` : ""}
-          </span>
+          </motion.span>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -209,16 +234,12 @@ export default function ProjectDetail() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <LoadingScreen label="Loading project" />;
   }
 
   if (!project) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
+      <div className="min-h-screen flex items-center justify-center text-muted">
         Project not found.{" "}
         <Link to="/dashboard" className="text-indigo-400 ml-1">Go back</Link>
       </div>
@@ -226,18 +247,16 @@ export default function ProjectDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 light:bg-white text-white light:text-slate-900 flex flex-col transition-colors">
-      <header className="border-b border-slate-800 light:border-slate-200 bg-slate-900/60 light:bg-white/90 backdrop-blur sticky top-0 z-10">
+    <div className="min-h-screen text-ink flex flex-col">
+      <header className="border-b border-line bg-canvas/70 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-4">
-          <Link to="/" className="text-xl font-bold text-white light:text-slate-900 tracking-tight">
-            Req<span className="text-indigo-400 light:text-indigo-600">2</span>UI
-          </Link>
-          <span className="text-slate-700 light:text-slate-300 text-lg font-light">/</span>
-          <Link to="/dashboard" className="text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900 transition text-sm flex items-center gap-1">
+          <Link to="/"><Logo size="sm" /></Link>
+          <span className="text-faint text-lg font-light">/</span>
+          <Link to="/dashboard" className="text-muted hover:text-ink transition text-sm flex items-center gap-1">
             <ArrowLeft size={14} /> Dashboard
           </Link>
-          <span className="text-slate-700 light:text-slate-300 text-lg font-light">/</span>
-          <span className="text-slate-300 light:text-slate-700 text-sm font-medium truncate max-w-xs">{project.name}</span>
+          <span className="text-faint text-lg font-light">/</span>
+          <span className="mono-label text-[10px] text-ink truncate max-w-xs">{project.name}</span>
           <div className="ml-auto flex items-center gap-3">
             <ThemeToggle />
             <StatusBadge status={project.status} />
@@ -250,38 +269,37 @@ export default function ProjectDetail() {
         <div className="lg:col-span-2 space-y-6">
           {editing ? (
             <div className="space-y-3">
-              <input
+              <Input
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 maxLength={200}
-                className="w-full bg-slate-800 light:bg-white border border-slate-700 light:border-slate-300 rounded-xl px-4 py-2.5 text-lg font-bold text-white light:text-slate-900 focus:outline-none focus:border-indigo-500 transition"
+                className="!text-lg !font-bold"
                 placeholder="Project name"
               />
-              <textarea
+              <Textarea
                 value={editDesc}
                 onChange={(e) => setEditDesc(e.target.value)}
                 rows={5}
                 maxLength={5000}
-                className="w-full bg-slate-800 light:bg-white border border-slate-700 light:border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-300 light:text-slate-700 focus:outline-none focus:border-indigo-500 transition resize-none leading-relaxed"
                 placeholder="Project description"
               />
 
               {/* Organization & document details (optional) */}
-              <div className="rounded-xl border border-slate-800 light:border-slate-200 p-4">
-                <p className="text-xs font-medium text-slate-400 light:text-slate-600 mb-3">
+              <div className="rounded-xl border border-line p-4">
+                <p className="text-xs font-medium text-muted mb-3">
                   Organization &amp; document details
-                  <span className="text-slate-600 light:text-slate-400 font-normal"> · optional, enriches the SRS &amp; export title page</span>
+                  <span className="text-faint font-normal"> · optional, enriches the SRS &amp; export title page</span>
                 </p>
                 <div className="grid sm:grid-cols-2 gap-3">
                   {META_FIELDS.map((f) => (
                     <div key={f.key} className={f.full ? "sm:col-span-2" : ""}>
-                      <label className="block text-xs text-slate-500 light:text-slate-500 mb-1">{f.label}</label>
-                      <input
+                      <Label htmlFor={`em-${f.key}`}>{f.label}</Label>
+                      <Input
+                        id={`em-${f.key}`}
                         type={f.key === "contact_email" ? "email" : "text"}
                         value={editMeta[f.key] ?? ""}
                         onChange={(e) => setEditMeta((m) => ({ ...m, [f.key]: e.target.value }))}
                         maxLength={400}
-                        className="w-full bg-slate-800 light:bg-white border border-slate-700 light:border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-200 light:text-slate-800 focus:outline-none focus:border-indigo-500 transition"
                         placeholder={f.placeholder}
                       />
                     </div>
@@ -290,49 +308,39 @@ export default function ProjectDetail() {
               </div>
 
               {/* UI design preferences (optional) */}
-              <div className="rounded-xl border border-slate-800 light:border-slate-200 p-4">
-                <p className="text-xs font-medium text-slate-400 light:text-slate-600 mb-3">
+              <div className="rounded-xl border border-line p-4">
+                <p className="text-xs font-medium text-muted mb-3">
                   UI Design Preferences
-                  <span className="text-slate-600 light:text-slate-400 font-normal"> · optional, guides UI code generation</span>
+                  <span className="text-faint font-normal"> · optional, guides UI code generation</span>
                 </p>
                 <UIPreferencesForm value={editPrefs} onChange={setEditPrefs} />
               </div>
 
               <div className="flex gap-2">
-                <button
-                  onClick={handleSaveEdit}
-                  disabled={saving || !editName.trim() || !editDesc.trim()}
-                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
-                >
+                <Button size="sm" onClick={handleSaveEdit} disabled={saving || !editName.trim() || !editDesc.trim()}>
                   {saving ? "Saving…" : "Save"}
-                </button>
-                <button
-                  onClick={() => setEditing(false)}
-                  className="text-slate-400 hover:text-white light:hover:text-slate-900 text-sm px-4 py-2 rounded-lg border border-slate-700 light:border-slate-300 transition"
-                >
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setEditing(false)}>
                   Cancel
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
             <div className="group relative">
+              <Kicker className="mb-3">project</Kicker>
               <div className="flex items-start gap-2">
-                <h1 className="text-2xl font-bold mb-2 flex-1">
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
-                    {project.name}
-                  </span>
-                </h1>
+                <h1 className="text-3xl font-bold tracking-tight mb-2 flex-1">{project.name}</h1>
                 <button
                   onClick={startEdit}
                   title="Edit project"
-                  className="mt-1 flex-shrink-0 p-1.5 rounded-lg text-slate-600 hover:text-slate-300 light:hover:text-slate-700 hover:bg-slate-800 light:hover:bg-slate-100 transition opacity-0 group-hover:opacity-100"
+                  className="mt-1 flex-shrink-0 p-1.5 rounded-lg text-faint hover:text-ink hover:bg-surface transition opacity-0 group-hover:opacity-100"
                 >
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M10 2l2 2-7 7H3v-2l7-7z"/>
                   </svg>
                 </button>
               </div>
-              <p className="text-slate-400 light:text-slate-600 text-sm leading-relaxed">{project.description}</p>
+              <p className="text-muted text-sm leading-relaxed">{project.description}</p>
               {project.metadata && Object.values(project.metadata).some(Boolean) && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {([
@@ -346,9 +354,9 @@ export default function ProjectDetail() {
                     .map(([k, label]) => (
                       <span
                         key={k}
-                        className="inline-flex items-center gap-1 text-xs bg-slate-900 light:bg-slate-100 border border-slate-800 light:border-slate-200 rounded-full px-2.5 py-1 text-slate-400 light:text-slate-600"
+                        className="inline-flex items-center gap-1 text-xs bg-surface border border-line rounded-full px-2.5 py-1 text-muted"
                       >
-                        <span className="text-slate-600 light:text-slate-400">{label}:</span>
+                        <span className="mono-label text-[9px] text-faint">{label}:</span>
                         {project.metadata![k]}
                       </span>
                     ))}
@@ -359,7 +367,7 @@ export default function ProjectDetail() {
                   {summarizePreferences(project.ui_preferences).map((l) => (
                     <span
                       key={l}
-                      className="inline-flex items-center gap-1 text-xs bg-indigo-500/10 light:bg-indigo-50 border border-indigo-500/20 light:border-indigo-200 rounded-full px-2.5 py-1 text-indigo-300 light:text-indigo-700"
+                      className="inline-flex items-center gap-1 text-xs bg-indigo-500/10 border border-indigo-500/25 rounded-full px-2.5 py-1 text-indigo-300"
                     >
                       {l}
                     </span>
@@ -370,7 +378,7 @@ export default function ProjectDetail() {
           )}
 
           {genError && (
-            <div className="bg-red-500/10 light:bg-red-50 border border-red-500/30 light:border-red-200 text-red-400 light:text-red-600 text-sm px-4 py-3 rounded-xl">
+            <div className="bg-red-500/10 border border-red-500/30 text-red-400 light:text-red-600 text-sm px-4 py-3 rounded-lg">
               {genError}
             </div>
           )}
@@ -381,45 +389,55 @@ export default function ProjectDetail() {
           )}
 
           <div className="flex gap-3 flex-wrap">
-            <button
-              onClick={handleGenerate}
-              disabled={generating || project.status === "generating"}
-              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-5 py-2.5 rounded-xl transition text-sm shadow-lg shadow-indigo-900/40 light:shadow-indigo-100"
-            >
+            <Button onClick={handleGenerate} disabled={generating || project.status === "generating"}>
               {generating ? "Generating…" : project.status === "completed" ? "Re-generate" : "Generate artifacts"}
-            </button>
+            </Button>
 
-            {(project.status === "completed" || stages.some((s) => s.status === "completed")) && (
-              <button
-                onClick={() => navigate(`/projects/${id}/artifacts`)}
-                className="border border-slate-700 light:border-slate-300 hover:border-indigo-500/60 light:hover:border-indigo-400 text-slate-300 light:text-slate-600 hover:text-white light:hover:text-slate-900 font-medium px-5 py-2.5 rounded-xl transition text-sm flex items-center gap-1.5"
-              >
-                View artifacts <ArrowRight size={14} />
-              </button>
-            )}
+            {(() => {
+              const isGenerating = generating || project.status === "generating";
+              const hasArtifacts =
+                project.status === "completed" || stages.some((s) => s.status === "completed");
+              if (!hasArtifacts) return null;
+              // Navigating away tears down the SSE stream, which aborts an in-flight
+              // run (generation isn't backgrounded). Disable the button until done.
+              return (
+                <button
+                  onClick={() => navigate(`/projects/${id}/artifacts`)}
+                  disabled={isGenerating}
+                  title={isGenerating ? "Available once generation finishes" : undefined}
+                  className={buttonClass("secondary", "md")}
+                >
+                  View artifacts <ArrowRight size={14} />
+                </button>
+              );
+            })()}
           </div>
         </div>
 
         {/* Pipeline stages */}
-        <div className="bg-slate-900 light:bg-slate-50 border border-slate-800 light:border-slate-200 rounded-2xl p-5">
+        <div className="bg-surface border border-line rounded-2xl p-5 h-fit">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Pipeline</h2>
+            <h2 className="mono-label text-[11px] text-muted">Pipeline</h2>
             {stages.length > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 light:text-indigo-600 px-2 py-0.5 rounded-full font-medium">
+              <span className="mono-label inline-flex items-center gap-1 text-[10px] bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 px-2 py-0.5 rounded-full">
                 {stages.filter(s => s.status === "completed").length}/{stages.length}
               </span>
             )}
           </div>
-          {stages.length > 0 && (
-            <div className="h-1 bg-slate-800 light:bg-slate-200 rounded-full mb-4 overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
-                style={{ width: `${(stages.filter(s => s.status === "completed").length / stages.length) * 100}%` }}
-              />
-            </div>
-          )}
+          <AnimatePresence>
+            {stages.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+              >
+                <GenerationProgress stages={stages} generating={generating} />
+                {id && <LiveArtifactPreview projectId={id} stages={stages} />}
+              </motion.div>
+            )}
+          </AnimatePresence>
           {stages.length === 0 ? (
-            <p className="text-slate-600 light:text-slate-400 text-sm">Run generation to see progress here.</p>
+            <p className="text-muted text-sm">Run generation to see progress here.</p>
           ) : (
             stages.map((s) => (
               <StageRow key={s.stage} stage={s.stage} name={s.name} status={s.status} detail={s.detail} progress={s.progress} />
@@ -428,7 +446,7 @@ export default function ProjectDetail() {
         </div>
       </main>
 
-      <footer className="border-t border-slate-800 light:border-slate-200 py-6 text-center text-slate-700 light:text-slate-400 text-xs">
+      <footer className="border-t border-line py-6 text-center mono-label text-[10px] text-faint">
         Req2UI · AASTMT Graduation Project · {new Date().getFullYear()}
       </footer>
     </div>

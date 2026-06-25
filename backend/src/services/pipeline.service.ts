@@ -1,5 +1,5 @@
 import { sql } from "../db/client";
-import { callGroq, GROQ_HEAVY, GROQ_LIGHT } from "./groq.service";
+import { callGroq, callGroqText, GROQ_HEAVY, GROQ_LIGHT } from "./groq.service";
 import { callGeminiJSON, callGeminiText } from "./gemini.service";
 import { UIPreferences, uiPreferencesPromptBlock } from "../config/uiPreferences";
 
@@ -310,6 +310,67 @@ export function htmlLooksComplete(html: string): boolean {
   return close >= open - 2;
 }
 
+/**
+ * Minimal design system used as a last-resort fallback when BOTH Gemini and the
+ * Groq cross-provider fallback fail to produce one. Generation can still proceed
+ * with a coherent (if plain) navbar/footer rather than aborting the whole stage.
+ */
+export const DEFAULT_DESIGN_SYSTEM = {
+  navbar:
+    '<nav class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur border-b border-slate-800 px-6 h-14 flex items-center justify-between"><span class="font-bold text-white">App</span><div class="w-8 h-8 rounded-full bg-indigo-600"></div></nav>',
+  footer:
+    '<footer class="border-t border-slate-800 py-6 text-center text-slate-500 text-sm">© 2026</footer>',
+  body_classes: "bg-slate-950 text-slate-100 min-h-screen flex flex-col",
+  components: {},
+  sample_data: {},
+};
+
+/**
+ * Design-system pass with graceful degradation: try Gemini, then Groq (which has
+ * an independent quota and is unaffected by Gemini's traffic spikes), then fall
+ * back to a hardcoded default. Never throws — Stage 10 always gets a usable kit.
+ */
+async function designSystemWithFallback(
+  systemPrompt: string,
+  userPrompt: string,
+  emit: Emit,
+  stageName: string,
+  total: number
+): Promise<any> {
+  try {
+    return await callGeminiJSON(systemPrompt, userPrompt, 8000);
+  } catch (gemErr) {
+    console.warn("[stage10] Gemini design system failed, falling back to Groq:", (gemErr as any)?.message);
+    emit({ stage: 10, name: stageName, status: "running", detail: "Gemini busy — using fallback model for the design system…", progress: { current: 0, total } });
+    try {
+      return await callGroq(systemPrompt, userPrompt, 8000, GROQ_HEAVY);
+    } catch (groqErr) {
+      console.warn("[stage10] Groq design system fallback also failed, using default:", (groqErr as any)?.message);
+      return { ...DEFAULT_DESIGN_SYSTEM };
+    }
+  }
+}
+
+/**
+ * Per-screen HTML with a cross-provider fallback: Gemini first (with its own
+ * model-chain + completeness repair), then Groq if Gemini is unavailable. Throws
+ * only when both providers fail for this screen — the caller then drops just that
+ * screen rather than the whole batch.
+ */
+async function screenHtmlWithFallback(systemPrompt: string, userPrompt: string): Promise<string> {
+  try {
+    let html = await callGeminiText(systemPrompt, userPrompt, 16000);
+    if (!htmlLooksComplete(html)) {
+      html = await callGeminiText(systemPrompt, userPrompt, 24000); // repair truncation
+    }
+    return html;
+  } catch (gemErr) {
+    console.warn("[stage10] Gemini screen failed, falling back to Groq:", (gemErr as any)?.message);
+    // Groq's largest model is the best HTML producer in the fallback chain.
+    return await callGroqText(systemPrompt, userPrompt, 16000, GROQ_HEAVY);
+  }
+}
+
 async function generateUICodeMultipass(
   projectId: string,
   projectName: string,
@@ -349,8 +410,10 @@ async function generateUICodeMultipass(
     const accentScript = accentConfigScript(uiPreferences);
 
     // ── Pass 1: Design system — navbar, footer, plus a reusable component
-    //    class kit + shared sample data so every screen stays consistent. ────
-    const designSystem = await callGeminiJSON(
+    //    class kit + shared sample data so every screen stays consistent.
+    //    Uses Gemini → Groq → hardcoded-default fallback so traffic spikes on
+    //    Gemini never abort the stage. ───────────────────────────────────────
+    const designSystem = await designSystemWithFallback(
       `You are a senior UI designer. Create a cohesive HTML design system + reusable component class kit for a web app.
 Return a JSON object with exactly this shape:
 {
@@ -381,7 +444,9 @@ Design rules:
 - Use real, project-appropriate link text (not placeholders)
 - sample_data: 3–5 realistic, domain-appropriate records for the main entities in this system (real names/numbers/dates, NOT Lorem Ipsum). Screens reuse these exact records so the app feels real and connected.${prefsBlock}`,
       `Project: ${projectName}\nSystem: ${s1.system_summary}\nActors: ${s1.actors?.join(", ") ?? ""}`,
-      8000
+      emit,
+      stageName,
+      total
     );
 
     const kit = (designSystem.components ?? {}) as Record<string, unknown>;
@@ -413,11 +478,12 @@ Design rules:
     }
 
     const generatedScreens: any[] = [];
+    const failedScreens: string[] = [];
     let completedCount = 0;
     const BATCH = 3;
     for (let i = 0; i < screens.length; i += BATCH) {
       const batch = screens.slice(i, i + BATCH);
-      const batchResults = await Promise.all(
+      const batchResults = await Promise.allSettled(
         batch.map(async (sc: any) => {
           const componentsList = (sc.components ?? [])
             .map((c: any) => `- ${c.type}: "${c.label}"${c.purpose ? ` (${c.purpose})` : ""}`)
@@ -470,12 +536,8 @@ Project: ${projectName}
 Actors: ${s1.actors?.join(", ")}
 System: ${s1.system_summary}`;
 
-          // Larger budget than before to avoid mid-tag truncation on dense pages;
-          // one repair retry with a bigger cap if the first draft looks cut off.
-          let html = await callGeminiText(systemPrompt, userPrompt, 16000);
-          if (!htmlLooksComplete(html)) {
-            html = await callGeminiText(systemPrompt, userPrompt, 24000);
-          }
+          // Gemini → Groq cross-provider fallback (incl. truncation repair).
+          const html = await screenHtmlWithFallback(systemPrompt, userPrompt);
 
           completedCount++;
           emit({
@@ -495,9 +557,34 @@ System: ${s1.system_summary}`;
           };
         })
       );
-      generatedScreens.push(...batchResults);
+      // Passoff: keep every screen that succeeded; a screen that failed on BOTH
+      // providers is dropped (and reported) rather than aborting the whole run.
+      for (let j = 0; j < batchResults.length; j++) {
+        const r = batchResults[j];
+        if (r.status === "fulfilled") {
+          generatedScreens.push(r.value);
+        } else {
+          const sc = batch[j];
+          failedScreens.push(sc.name);
+          console.warn(`[stage10] dropping screen "${sc.name}" — all providers failed:`, (r.reason as any)?.message);
+          completedCount++;
+          emit({
+            stage: 10,
+            name: stageName,
+            status: "running",
+            detail: `Skipped ${sc.name} (generation unavailable)`,
+            progress: { current: completedCount, total },
+          });
+        }
+      }
     }
 
+    // If every screen failed there is nothing to hand off — surface a real error.
+    if (generatedScreens.length === 0) {
+      throw new Error("UI code generation failed for every screen (Gemini and Groq both unavailable). Try again later.");
+    }
+
+    const partial = failedScreens.length > 0;
     const result = {
       design_system: {
         navbar: designSystem.navbar,
@@ -506,11 +593,19 @@ System: ${s1.system_summary}`;
         components: kit,
       },
       screens: generatedScreens,
+      // Record any incomplete generation so the UI can tell the user some screens
+      // were skipped and offer a targeted re-run.
+      ...(partial ? { partial: true, failed_screens: failedScreens } : {}),
     };
 
     await upsertArtifact(projectId, "ui_code", result);
     await upsertStage(projectId, 10, "completed");
-    emit({ stage: 10, name: stageName, status: "completed" });
+    emit({
+      stage: 10,
+      name: stageName,
+      status: "completed",
+      ...(partial ? { detail: `Generated ${generatedScreens.length}/${total} screens — ${failedScreens.length} skipped (provider unavailable)` } : {}),
+    });
   } catch (err: any) {
     const msg = err?.message ?? "Unknown error";
     await upsertStage(projectId, 10, "failed", msg);

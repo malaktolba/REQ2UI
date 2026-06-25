@@ -7,6 +7,7 @@ import { CheckIcon, ArrowRight, ChevronDown, ArrowLeft } from "../components/Ico
 import { ThemeToggle } from "../components/ThemeToggle";
 import { UIRefinementPanel } from "../components/UIRefinementPanel";
 import { useToast } from "../context/ToastContext";
+import { LoadingScreen } from "../components/LoadingScreen";
 
 // ─── Tab configuration ──────────────────────────────────────────────────────
 
@@ -1507,11 +1508,7 @@ export default function ArtifactsViewer() {
     .every(k => availableKeys.has(k));
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 light:bg-white flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <LoadingScreen label="Loading artifacts" />;
   }
 
   return (
