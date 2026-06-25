@@ -1,5 +1,6 @@
 import Groq from "groq-sdk";
 import { env } from "../config/env";
+import { timeLLMCall } from "./llm-metrics";
 
 const groq = new Groq({ apiKey: env.GROQ_API_KEY });
 
@@ -54,16 +55,18 @@ export async function callGroq(
   for (let attempt = 0; attempt <= retries; attempt++) {
     const model = chain[modelIndex];
     try {
-      const completion = await groq.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt + nudge },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.3,
-        max_tokens: maxTokens,
-      });
+      const completion = await timeLLMCall("groq", model, () =>
+        groq.chat.completions.create({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt + nudge },
+            { role: "user", content: userPrompt },
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.3,
+          max_tokens: maxTokens,
+        })
+      );
       const choice = completion.choices[0];
       const raw = choice.message.content;
       if (!raw) throw new Error("Empty response from Groq");
@@ -107,15 +110,17 @@ export async function callGroqText(
   for (let attempt = 0; attempt <= retries; attempt++) {
     const model = chain[modelIndex];
     try {
-      const completion = await groq.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.4,
-        max_tokens: maxTokens,
-      });
+      const completion = await timeLLMCall("groq", model, () =>
+        groq.chat.completions.create({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          temperature: 0.4,
+          max_tokens: maxTokens,
+        })
+      );
       const raw = completion.choices[0].message.content;
       if (!raw) throw new Error("Empty response from Groq");
       // Strip markdown code fences if present

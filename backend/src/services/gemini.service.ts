@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { env } from "../config/env";
+import { timeLLMCall } from "./llm-metrics";
 
 const gemini = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
@@ -57,21 +58,23 @@ async function generate(
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       await throttle();
-      const res = await gemini.models.generateContent({
-        model: MODEL,
-        contents: userPrompt,
-        config: {
-          systemInstruction: systemPrompt,
-          ...(json ? { responseMimeType: "application/json" } : {}),
-          temperature,
-          maxOutputTokens: maxTokens,
-          // gemini-2.5-flash is a thinking model and thinking tokens count
-          // against maxOutputTokens — leave it on and a low cap starves the
-          // visible output (truncated/unterminated JSON). UI/HTML gen doesn't
-          // need reasoning, so disable it for predictable, complete output.
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      });
+      const res = await timeLLMCall("gemini", MODEL, () =>
+        gemini.models.generateContent({
+          model: MODEL,
+          contents: userPrompt,
+          config: {
+            systemInstruction: systemPrompt,
+            ...(json ? { responseMimeType: "application/json" } : {}),
+            temperature,
+            maxOutputTokens: maxTokens,
+            // gemini-2.5-flash is a thinking model and thinking tokens count
+            // against maxOutputTokens — leave it on and a low cap starves the
+            // visible output (truncated/unterminated JSON). UI/HTML gen doesn't
+            // need reasoning, so disable it for predictable, complete output.
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        })
+      );
       const raw = res.text;
       if (!raw) throw new Error("Empty response from Gemini");
       return raw;

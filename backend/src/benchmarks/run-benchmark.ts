@@ -23,6 +23,7 @@ import { sql } from "../db/client";
 import { runPipeline } from "../services/pipeline.service";
 import type { StageEvent } from "../services/pipeline.service";
 import { evaluateSRS, type ArtifactMap } from "../services/metrics.service";
+import { resetLatency, latencySummary, type ProviderLatency } from "../services/llm-metrics";
 
 const STAGE_NAMES = [
   "Requirement Extraction", "Functional Requirements", "Non-Functional Requirements",
@@ -70,11 +71,15 @@ async function main() {
 
   console.error(`Benchmarking "${name}" over ${runs} run(s) — this calls the real LLMs.\n`);
 
+  // Capture per-call API latency (NFR2) across all runs.
+  resetLatency();
+
   const perRun: { durations: Record<number, number>; totalSeconds: number }[] = [];
   for (let r = 1; r <= runs; r++) {
     console.error(`── Run ${r}/${runs} ──`);
     perRun.push(await timedRun(id, name, description));
   }
+  const latency: ProviderLatency[] = latencySummary();
 
   // Accuracy of the final generated SRS.
   const artifactRows = (await sql`SELECT type, content FROM artifacts WHERE project_id = ${id}`) as any[];
@@ -96,6 +101,21 @@ async function main() {
   const totals = perRun.map((p) => p.totalSeconds);
   lines.push(`| | **End-to-end total** | **${mean(totals).toFixed(2)}** | ${Math.min(...totals).toFixed(2)} | ${Math.max(...totals).toFixed(2)} |`, "");
 
+  lines.push("## API latency per LLM call (NFR2)", "");
+  if (latency.length) {
+    lines.push("| Provider | Calls | Failures | Mean (s) | p50 (s) | p95 (s) | Max (s) |",
+      "|---|---:|---:|---:|---:|---:|---:|");
+    for (const l of latency) {
+      lines.push(
+        `| ${l.provider} | ${l.count} | ${l.failures} | ${(l.mean / 1000).toFixed(2)} | ` +
+        `${(l.p50 / 1000).toFixed(2)} | ${(l.p95 / 1000).toFixed(2)} | ${(l.max / 1000).toFixed(2)} |`
+      );
+    }
+    lines.push("");
+  } else {
+    lines.push("_No LLM calls were recorded._", "");
+  }
+
   lines.push("## Accuracy of generated SRS", "");
   lines.push(`Overall accuracy: **${(accuracy.overall * 100).toFixed(1)}%**`, "");
   lines.push("| Dimension | Score |", "|---|---:|");
@@ -108,7 +128,7 @@ async function main() {
   const outDir = join(__dirname, "..", "..", "reports");
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, "benchmark-report.json"), JSON.stringify({
-    project: { id, name }, runs, perRun, accuracy,
+    project: { id, name }, runs, perRun, accuracy, latency,
     meanTotalSeconds: mean(totals), generatedAt: new Date().toISOString(),
   }, null, 2));
   writeFileSync(join(outDir, "benchmark-report.md"), md);

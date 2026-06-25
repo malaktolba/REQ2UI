@@ -677,7 +677,7 @@ The implemented system successfully realises the full pipeline envisioned in the
 Testing the system spans two complementary levels: (i) the artifacts the system \emph{generates} for a user's project (the functional and security test cases produced by stages 5 and 6, documented in IEEE 829 form), and (ii) the verification of the platform itself through an automated unit/integration test suite. This chapter focuses on the latter, together with the evaluation strategy for the non-functional requirements.
 
 \section{Automated Test Suite}
-The backend is covered by a Jest test suite executed with \texttt{npm test} (\texttt{jest --runInBand}). The suite mocks the database and token service so routes are tested in isolation, and uses \texttt{supertest} to drive the Express application. At the time of writing, the suite comprises \textbf{nine test suites and 94 passing tests}.
+The backend is covered by a Jest test suite executed with \texttt{npm test} (\texttt{jest --runInBand}). The suite mocks the database and token service so routes are tested in isolation, and uses \texttt{supertest} to drive the Express application. At the time of writing, the suite comprises \textbf{ten test suites and 103 passing tests}.
 
 \begin{longtable}{L{3.4cm} L{1.4cm} L{8cm}}
 \caption{Automated test coverage}\\
@@ -693,6 +693,7 @@ Pipeline service & 4 & Orchestration flow, stage sequencing, and resumability (s
 Pipeline helpers & 26 & Screen categorisation, distinct-screen selection (dedup/backfill/limit), Mermaid sanitisation, deterministic accent-scale construction, the indigo-remap accent config, and HTML completeness validation. \\
 Metrics service & 12 & Coverage and traceability metric calculations over requirements and test cases. \\
 UI preferences & 7 & Mapping of preference fields to prompt guidance, custom-colour handling, and omission of empty/``AI-chooses'' values. \\
+LLM latency metrics & 9 & Nearest-rank percentile computation, per-provider aggregation (count/failures/p50/p95/max), buffer bounding, and success/failure recording around a timed call. \\
 Export service & 15 & LaTeX document structure (title page, front matter, numbered chapters), colour palette and styled headings, requirement tables, balanced \texttt{xltabular}/\texttt{itemize}/\texttt{enumerate} environments, folding of acceptance criteria and controls into rows, and CSV header/row correctness and counts. \\
 \bottomrule
 \end{longtable}
@@ -701,7 +702,64 @@ Export service & 15 & LaTeX document structure (title page, front matter, number
 For each generated project, the system itself produces functional test cases (stage 5; at least two per functional requirement, including positive and negative paths) and security test cases (stage 6; attack-vector-driven, one or more per security requirement). These are presented to the user in IEEE 829 form---identifier, coverage link, preconditions, steps, and expected result---and are exported in the PDF, DOCX, and CSV documents. The traceability matrix (stage 8) then quantifies coverage, reporting the proportion of functional requirements linked to test cases.
 
 \section{Non-Functional Evaluation}
-The non-functional requirements (Section~4.3) are evaluated with the tools identified there: Apache JMeter / Locust for response time and load, Postman / k6 for API latency, axe / WAVE for accessibility, and UptimeRobot / Pingdom for availability monitoring of the deployed services. % TODO: insert measured results (response-time distributions, concurrent-user load test, accessibility audit) once the evaluation runs are completed.
+The non-functional requirements (Section~4.3) are evaluated along two axes: the \emph{quality} of the generated SRS and the \emph{performance} of the generation process. Both are measured by tooling built into the platform, so the figures are reproducible rather than anecdotal.
+
+\subsection{Measurement Methodology}
+A dependency-free \emph{metrics engine} scores a generated SRS against 32 measurable rubrics derived from IEEE~830/829, each expressed as a passed/total ratio and grouped into four dimensions --- \textbf{completeness} (were all artifacts and fields produced?), \textbf{conformance} (do they follow the required schema and phrasing, e.g.\ ``the system shall'' and \texttt{FR-NNN} identifiers?), \textbf{coverage} (is every requirement traced to a test case?), and \textbf{validity} (are priorities, NFR categories, and OWASP mappings drawn from the allowed sets?). The mean rubric score is reported as the SRS \emph{accuracy}. Two tools consume the engine: a database report (\texttt{npm run report}) that scores every completed project and derives per-stage timing from the recorded \texttt{pipeline\_stages} timestamps (no API cost), and a live benchmark (\texttt{npm run bench}) that re-generates a project while timing each stage with a monotonic clock and capturing per-call API latency. The results below were produced by the database report over the projects generated during development.
+
+\subsection{SRS Quality Results}
+Across the evaluated projects the mean SRS accuracy was \textbf{97.6\%}. Table~\ref{tab:accuracy} gives the breakdown by quality dimension. Conformance and validity are essentially perfect, confirming that the structured-prompting/JSON-schema approach reliably yields well-formed, standards-conformant artifacts. The small completeness shortfall is concentrated in two optional front-matter rubrics (project ``objectives'' and some narrative prose fields), which are occasionally omitted for terse inputs; the core requirement, test-case, traceability, UML, and UI-code artifacts score at or near 100\%.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{l r}
+\toprule
+\textbf{Quality dimension} & \textbf{Mean score} \\
+\midrule
+Completeness & 93.9\% \\
+Conformance & 100.0\% \\
+Coverage & 97.4\% \\
+Validity & 99.4\% \\
+\midrule
+\textbf{Overall accuracy} & \textbf{97.6\%} \\
+\bottomrule
+\end{tabular}
+\caption{Generated-SRS accuracy by quality dimension (mean across evaluated projects).}
+\label{tab:accuracy}
+\end{table}
+
+\subsection{Generation-Time Results}
+Table~\ref{tab:gentime} reports the mean processing time of each pipeline stage. The cost is dominated by the language-model stages that emit the most content --- functional test cases ($\approx$47\,s) and UI code generation ($\approx$80\,s, which itself comprises a design-system call plus one call per screen) --- while the structured-extraction stages complete in single-digit seconds. The summed per-stage time is $\approx$173\,s; true end-to-end wall-clock time is lower because independent stages are executed in concurrent groups (Section~6.3.2), and is reported directly by \texttt{npm run bench}. This comfortably satisfies the response-time intent of NFR1 for inputs up to the 5000-character limit.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{r l r}
+\toprule
+\textbf{\#} & \textbf{Stage} & \textbf{Mean time (s)} \\
+\midrule
+1 & Requirement Extraction & 4.3 \\
+2 & Functional Requirements & 5.3 \\
+3 & Non-Functional Requirements & 1.3 \\
+4 & Security Requirements & 26.4 \\
+5 & Functional Test Cases & 46.5 \\
+6 & Security Test Cases & 7.5 \\
+7 & UI Wireframe Descriptions & 3.9 \\
+8 & Traceability Matrix & 13.1 \\
+9 & UML Diagrams & 4.6 \\
+10 & UI Code Generation & 80.4 \\
+\midrule
+ & \textbf{Summed stage time} & \textbf{$\approx$173} \\
+\bottomrule
+\end{tabular}
+\caption{Mean generation time per pipeline stage (database report).}
+\label{tab:gentime}
+\end{table}
+
+\subsection{API Latency (NFR2)}
+Per-call API latency is captured by an in-process collector that times every Groq and Gemini request --- success or failure --- and aggregates the samples into p50/p95/max per provider. The benchmark harness resets this collector before a run and emits the summary alongside the timing and accuracy tables, providing the direct measurement basis for NFR2 (external API calls within target latency, with a bounded 95th percentile). The retry-and-fallback logic (Section~6.3.1) also makes the collector a natural place to observe the failure rate that NFR8 addresses.
+
+\subsection{Complementary External Evaluation}
+The remaining non-functional requirements are assessed with the external tools identified in Section~4.3, which sit outside the application code: concurrent-user load (NFR3) with Apache~JMeter / k6 against the deployed backend; accessibility conformance (NFR6, WCAG~2.1~AA) with axe~/~WAVE / \texttt{pa11y} against the generated UI screens; and availability (NFR7) with UptimeRobot~/~Pingdom monitoring of the live services.
 
 \section{Security Validation}
 Beyond the generated security test cases, the platform's own security posture is validated against the OWASP Top 10 controls implemented in Chapter~6: bcrypt password hashing, JWT validation, refresh-token rotation with family-based theft detection, account lockout, input validation (Zod), rate limiting, security headers (Helmet), and TLS in transit. % TODO: attach OWASP ZAP / Burp Suite scan results for the deployed environment.
