@@ -1,16 +1,33 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+
+function RouteSpinner() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950">
+      <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 export function ProtectedRoute() {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return <RouteSpinner />;
 
-  return user ? <Outlet /> : <Navigate to="/login" replace />;
+  // Send unauthenticated users to login, remembering where they meant to go.
+  return user ? (
+    <Outlet />
+  ) : (
+    <Navigate to="/login" replace state={{ from: location }} />
+  );
+}
+
+export function GuestRoute() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <RouteSpinner />;
+
+  // Authenticated users have no business on login/register.
+  return user ? <Navigate to="/dashboard" replace /> : <Outlet />;
 }
