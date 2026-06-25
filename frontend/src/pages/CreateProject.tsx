@@ -8,10 +8,134 @@ import { ThemeToggle } from "../components/ThemeToggle";
 import { UIPreferencesForm, UIPreferencesSummary } from "../components/UIPreferencesForm";
 import { cleanPreferences, summarizePreferences } from "../config/uiPreferences";
 
-const EXAMPLE_PROMPTS = [
-  "A mobile app for university students to track attendance and grades with professor notifications.",
-  "An e-commerce platform for handmade crafts with seller dashboards and buyer reviews.",
-  "A telemedicine app connecting patients with doctors for video consultations and prescriptions.",
+// Worked examples that demonstrate good input: each fills in a project name and
+// a detailed, multi-faceted description (purpose, users, features, constraints)
+// so the pipeline has rich material to work with — not a one-line teaser.
+type ExamplePrompt = {
+  emoji: string;
+  title: string;
+  tagline: string;
+  name: string;
+  description: string;
+  meta: ProjectMetadata;
+  prefs: UIPreferences;
+};
+
+const EXAMPLE_PROMPTS: ExamplePrompt[] = [
+  {
+    emoji: "🎓",
+    title: "Student Portal",
+    tagline: "University attendance & grades",
+    name: "Campus Connect",
+    description:
+      "A web and mobile portal for university students, professors, and academic administrators. " +
+      "Students view their class schedule, check in to lectures via a time-limited QR code, track attendance percentages per course, and see grades as they are posted. " +
+      "Professors take attendance, upload grades, and send announcements that notify enrolled students by push and email. " +
+      "Administrators manage courses, enrollments, and academic terms. " +
+      "Requirements: role-based access (student/professor/admin), an attendance threshold that flags at-risk students below 75%, GPA calculation, and exportable attendance reports. " +
+      "Constraints: must support 10,000 concurrent users during enrollment week, comply with FERPA for student records, and work offline for attendance check-in with later sync.",
+    meta: {
+      organization: "State University",
+      industry: "Education",
+      audience: "Students, professors, and academic administrators",
+      version: "1.0",
+    },
+    prefs: {
+      theme: "mobile-app",
+      color_mode: "light",
+      layout_density: "balanced",
+      navigation: "bottom",
+      content_style: "cards",
+      button_style: "rounded",
+      card_style: "elevated",
+      animations: "subtle",
+    },
+  },
+  {
+    emoji: "🛍️",
+    title: "Marketplace",
+    tagline: "Handmade-crafts e-commerce",
+    name: "Artisan Market",
+    description:
+      "A two-sided e-commerce marketplace for independent makers to sell handmade crafts to buyers. " +
+      "Sellers onboard with a verified profile, list products with photos and variants (size/colour), manage inventory, and view a sales dashboard with revenue, orders, and payout history. " +
+      "Buyers browse by category, search and filter, add to cart, check out, leave verified-purchase reviews with star ratings, and track shipments. " +
+      "Requirements: secure payments with escrow released on delivery confirmation, a 2.5% platform commission, review moderation to block abuse, wishlist and follow-a-seller features, and an admin panel for dispute resolution. " +
+      "Constraints: PCI-DSS compliant payment handling, GDPR-compliant data export/deletion, and sub-2-second product search across 100,000 listings.",
+    meta: {
+      organization: "Artisan Market Inc.",
+      industry: "E-commerce / Retail",
+      audience: "Independent makers and online shoppers",
+      version: "1.0",
+    },
+    prefs: {
+      theme: "modern-saas",
+      color_mode: "light",
+      layout_density: "balanced",
+      navigation: "top",
+      content_style: "cards",
+      button_style: "rounded",
+      card_style: "elevated",
+      animations: "subtle",
+    },
+  },
+  {
+    emoji: "🩺",
+    title: "Telemedicine",
+    tagline: "Video consultations & e-prescriptions",
+    name: "CareLink Health",
+    description:
+      "A telemedicine platform connecting patients with licensed doctors for remote video consultations. " +
+      "Patients search doctors by specialty, book appointments against real-time availability, join an in-app video call, receive digital prescriptions, and access their visit history. " +
+      "Doctors manage their calendar, conduct consultations, write e-prescriptions, and add clinical notes to a patient record. " +
+      "Requirements: end-to-end encrypted video, an appointment reminder system (push/SMS/email), in-app payments per consultation, prescription PDFs sent to the patient and a partner pharmacy, and a triage questionnaire before each visit. " +
+      "Constraints: HIPAA-compliant storage and audit logging, identity verification for doctors via license number, and graceful fallback to audio-only on poor connections.",
+    meta: {
+      organization: "CareLink Health",
+      industry: "Healthcare",
+      audience: "Patients and licensed physicians",
+      version: "1.0",
+    },
+    prefs: {
+      theme: "modern-saas",
+      color_mode: "custom",
+      primary_color: "#14b8a6",
+      layout_density: "spacious",
+      navigation: "sidebar",
+      content_style: "mixed",
+      button_style: "rounded",
+      card_style: "elevated",
+      animations: "subtle",
+    },
+  },
+  {
+    emoji: "💸",
+    title: "Personal Finance",
+    tagline: "Budgeting & expense tracking",
+    name: "PennyWise",
+    description:
+      "A personal-finance app that helps individuals track spending, set budgets, and reach savings goals. " +
+      "Users link bank accounts, see transactions auto-categorized (groceries, rent, transport…), set monthly budgets per category with overspend alerts, and create savings goals with progress tracking. " +
+      "A dashboard visualizes cash flow, net worth, and spending trends over time; users can split shared expenses and export reports. " +
+      "Requirements: secure bank aggregation via a third-party API, recurring-bill detection, customizable categories, and a weekly email summary. " +
+      "Constraints: encryption of financial data at rest and in transit, biometric app lock, read-only bank access (no money movement), and support for multiple currencies.",
+    meta: {
+      organization: "PennyWise",
+      industry: "Fintech / Personal Finance",
+      audience: "Individuals managing personal budgets",
+      version: "1.0",
+    },
+    prefs: {
+      theme: "dashboard",
+      color_mode: "dark",
+      layout_density: "compact",
+      navigation: "sidebar",
+      content_style: "mixed",
+      button_style: "rounded",
+      card_style: "elevated",
+      animations: "subtle",
+    },
+  },
 ];
 
 const MAX_DESC = 5000;
@@ -212,16 +336,34 @@ export default function CreateProject() {
           {prefSummary.length > 0 && <UIPreferencesSummary lines={prefSummary} />}
 
           <div>
-            <p className="text-xs text-slate-600 light:text-slate-400 mb-2 uppercase tracking-wider font-medium">Try an example</p>
-            <div className="space-y-2">
-              {EXAMPLE_PROMPTS.map((prompt) => (
+            <p className="text-xs text-slate-600 light:text-slate-400 mb-2 uppercase tracking-wider font-medium">
+              Try an example
+              <span className="ml-2 normal-case tracking-normal text-slate-700 light:text-slate-400 font-normal">— fills in a detailed brief you can edit</span>
+            </p>
+            <div className="grid sm:grid-cols-2 gap-2">
+              {EXAMPLE_PROMPTS.map((ex) => (
                 <button
-                  key={prompt}
+                  key={ex.title}
                   type="button"
-                  onClick={() => setDescription(prompt)}
-                  className="w-full text-left text-xs bg-slate-900 light:bg-slate-50 border border-slate-800 light:border-slate-200 hover:border-indigo-500/40 light:hover:border-indigo-300 rounded-xl px-4 py-3 text-slate-400 light:text-slate-500 hover:text-slate-200 light:hover:text-slate-700 transition leading-relaxed"
+                  onClick={() => {
+                    setDescription(ex.description);
+                    if (!name.trim()) setName(ex.name);
+                    // Also seed the optional context so the example is a complete,
+                    // editable brief — and reveal those panels so it's visible.
+                    setMeta(ex.meta);
+                    setPrefs(ex.prefs);
+                    setShowDetails(true);
+                    setShowPrefs(true);
+                  }}
+                  className="group text-left bg-slate-900 light:bg-slate-50 border border-slate-800 light:border-slate-200 hover:border-indigo-500/50 light:hover:border-indigo-300 rounded-xl px-4 py-3 transition"
                 >
-                  {prompt}
+                  <div className="flex items-center gap-2">
+                    <span className="text-base leading-none">{ex.emoji}</span>
+                    <span className="text-sm font-medium text-slate-300 light:text-slate-700 group-hover:text-white light:group-hover:text-slate-900 transition">
+                      {ex.title}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500 light:text-slate-500 leading-relaxed">{ex.tagline}</p>
                 </button>
               ))}
             </div>

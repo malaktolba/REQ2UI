@@ -4,7 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import { ThemeToggle } from "../components/ThemeToggle";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { user, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? "/dashboard";
@@ -12,6 +12,10 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // When already signed in, offer the current account instead of the form;
+  // "switching" reveals the form so a different account can sign in.
+  const [switching, setSwitching] = useState(false);
+  const showChooser = !!user && !switching;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -46,10 +50,39 @@ export default function Login() {
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 light:bg-indigo-500 animate-pulse" />
             Welcome back
           </div>
-          <h1 className="text-3xl font-bold text-white light:text-slate-900 mb-1">Sign in</h1>
-          <p className="text-slate-400 light:text-slate-500 text-sm">Continue building your requirements</p>
+          <h1 className="text-3xl font-bold text-white light:text-slate-900 mb-1">
+            {showChooser ? "You're signed in" : "Sign in"}
+          </h1>
+          <p className="text-slate-400 light:text-slate-500 text-sm">
+            {showChooser ? "Continue, or use a different account" : "Continue building your requirements"}
+          </p>
         </div>
 
+        {showChooser ? (
+          <div className="bg-slate-900 light:bg-white rounded-2xl p-8 border border-slate-800 light:border-slate-200 space-y-4 light:shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold flex-shrink-0">
+                {(user!.name || user!.email).charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-white light:text-slate-900 truncate">{user!.name || user!.email}</p>
+                <p className="text-xs text-slate-400 light:text-slate-500 truncate">{user!.email}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate(from, { replace: true })}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-xl transition shadow-lg shadow-indigo-900/40 light:shadow-indigo-200"
+            >
+              Continue as {user!.name || user!.email.split("@")[0]}
+            </button>
+            <button
+              onClick={() => { setSwitching(true); setError(""); setEmail(""); setPassword(""); }}
+              className="w-full border border-slate-700 light:border-slate-300 text-slate-300 light:text-slate-700 hover:border-indigo-500 hover:text-white light:hover:text-slate-900 font-medium py-3 rounded-xl transition"
+            >
+              Sign in with a different account
+            </button>
+          </div>
+        ) : (
         <form
           onSubmit={handleSubmit}
           className="bg-slate-900 light:bg-white rounded-2xl p-8 border border-slate-800 light:border-slate-200 space-y-5 light:shadow-sm"
@@ -99,6 +132,19 @@ export default function Login() {
             </Link>
           </p>
         </form>
+        )}
+
+        {switching && user && (
+          <p className="text-center mt-4 text-sm text-slate-400 light:text-slate-500">
+            <button
+              type="button"
+              onClick={() => { setSwitching(false); setError(""); }}
+              className="text-indigo-400 light:text-indigo-600 hover:text-indigo-300 light:hover:text-indigo-700 transition font-medium"
+            >
+              ← Back to {user.email}
+            </button>
+          </p>
+        )}
 
         <p className="text-center mt-6 text-xs text-slate-600 light:text-slate-400">
           <Link to="/" className="hover:text-slate-400 light:hover:text-slate-600 transition">← Back to home</Link>

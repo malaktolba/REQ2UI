@@ -595,10 +595,10 @@ The implemented web application provides the following primary screens, which co
 \begin{itemize}[leftmargin=*,nosep]
   \item \textbf{Landing / Authentication} --- marketing landing page with registration and login forms.
   \item \textbf{Dashboard} --- lists the authenticated user's projects with status badges and entry points to create a new project.
-  \item \textbf{Create Project} --- captures the project name and the natural-language description.
+  \item \textbf{Create Project} --- captures the project name and the natural-language description, with optional organization/document metadata and UI design preferences (theme, colour, navigation, density, etc.), plus worked example briefs that pre-fill a complete, detailed project.
   \item \textbf{Project Detail} --- shows the ten pipeline stages and streams live progress (via SSE) while generation runs.
   \item \textbf{Artifacts Viewer} --- displays the generated requirements, test cases, traceability matrix, and Mermaid-rendered UML diagrams, with export controls (PDF, DOCX, LaTeX, CSV).
-  \item \textbf{UI Code Preview} --- renders the generated HTML screens in an embedded preview frame with navigation between screens.
+  \item \textbf{UI Code Preview} --- renders the generated HTML screens in an embedded preview frame with navigation between screens, responsive (desktop/tablet/mobile) viewports, an instant accent-recolor control, and a panel for natural-language AI refinement of the generated UI.
 \end{itemize}
 % TODO: insert prototype screenshots of the above screens (captured from the running application).
 \noindent\textit{Screenshots of the running application are inserted here.}
@@ -640,8 +640,28 @@ Every Groq stage requests \texttt{response\_format: json\_object} at a low tempe
 \subsection{Concurrency and Resumability}
 Stages are grouped into dependency layers and the independent stages in each layer run concurrently (stages 3--5, then 6--7, then 8--10), shortening end-to-end latency. Before running, the orchestrator loads all existing artifacts for the project; any stage whose artifact is already present is marked complete and skipped, so an interrupted or failed run resumes from the point of failure. An explicit ``re-generate'' clears this cache and redoes every stage.
 
-\subsection{UML and UI Code Generation}
-Stage 9 emits three UML diagrams (use case, class, sequence) as Mermaid source, which the frontend renders client-side; the output is sanitised to strip code fences that would break rendering. Stage 10 is a two-pass process on Gemini: pass one produces a shared design system (navbar, footer, Tailwind theme), and pass two generates a complete HTML page for each functionally distinct screen. A categorisation heuristic (\texttt{selectDistinctScreens}) deduplicates near-identical screens (e.g.\ login vs.\ register) so generation effort is spent on genuinely different pages, capped at six. Gemini calls are funnelled through a throttled queue (minimum $\approx$4.5\,s spacing) to stay within free-tier rate limits, and ``thinking'' tokens are disabled so the output budget is spent on the visible HTML.
+\subsection{UML Diagram Generation}
+Stage 9 emits three UML diagrams (use case, class, sequence) as Mermaid source, which the frontend renders client-side; the output is sanitised to strip code fences that would break rendering.
+
+\subsection{UI Code Generation (Stage 10)}
+Stage 10 is the most elaborate stage and is implemented as a two-pass process on Gemini, summarised in Figure~\ref{fig:uicode}. Before any model call, a categorisation heuristic (\texttt{selectDistinctScreens}) deduplicates near-identical screens (e.g.\ login vs.\ register) so generation effort is spent on genuinely different pages, capped at six.
+
+\textbf{Pass one --- shared design system.} A single Gemini call produces, as structured JSON, a shared navbar and footer, the page \texttt{body} classes, a \emph{reusable component class kit} (canonical Tailwind class strings for buttons, inputs, labels, cards, badges, tables, and empty states), and a small set of realistic, domain-appropriate \emph{sample-data} records. The component kit and sample data are then threaded verbatim into every screen prompt, which is what keeps the generated pages visually consistent (identical buttons, cards, and tables) and makes the application feel connected (the same entities recur across screens) rather than a set of disconnected mock-ups.
+
+\textbf{Pass two --- per-screen HTML.} For each distinct screen the orchestrator gathers the screen's required components and the functional requirements relevant to it, falling back to the top general requirements when no specific match is found so that no page is generated from an empty context. The assembled prompt combines the design system, the component kit, the shared sample data, an accent configuration script, and explicit rules for Lucide icons, accessibility (semantic landmarks, \texttt{aria} labels, label/input association, AA contrast), responsiveness, and loading/empty/error states. Screens are generated in concurrent batches of three.
+
+\textbf{Deterministic theming.} The brand accent is owned by code rather than the model: a helper emits a Tailwind configuration that, by default, reproduces the standard \texttt{indigo} scale, but when the user supplies a custom primary colour it deterministically derives a full 50--900 scale from that hex and \emph{redefines} \texttt{indigo} to it (\texttt{buildAccentScale}). Because every generated page references the same \texttt{indigo-*} utilities, this single substitution recolours the whole application reliably, and it also enables an instant, client-side recolor in the preview (remapping the Tailwind config and a small set of CSS overrides) with no additional model call.
+
+\textbf{Robustness.} Generated HTML is checked for completeness (\texttt{htmlLooksComplete}) to catch silent truncation at the output-token ceiling; a page that looks cut off is regenerated once with a larger token budget. Gemini calls are funnelled through a throttled queue (minimum $\approx$4.5\,s spacing) to stay within free-tier rate limits, and ``thinking'' tokens are disabled so the output budget is spent on the visible HTML.
+
+\textbf{Post-generation refinement.} After generation, the user can refine the result through natural-language instructions scoped to a single page, several pages, or the entire design system; the refinement is staged as a pending artifact and previewed before being applied or discarded, so changes are never destructive. The same screen also offers ready-made style presets and the instant accent recolor described above.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[height=0.92\textheight]{uicode.png}
+  \caption{Stage 10 UI code generation: two-pass design-system and per-screen process with requirement grounding, deterministic theming, and output validation.}
+  \label{fig:uicode}
+\end{figure}
 
 \section{Authentication and Security Implementation}
 Authentication uses short-lived JWT access tokens (15 minutes) held in \texttt{sessionStorage} and long-lived refresh tokens (7 days) stored in an \texttt{httpOnly} cookie. Refresh tokens are SHA-256 hashed before storage and grouped into a \emph{family}; on each refresh the used token is rotated (revoked and replaced), and if an already-revoked token is presented the entire family is revoked --- a standard refresh-token-theft mitigation. Passwords are hashed with \texttt{bcrypt} (work factor 12). Five failed logins lock an account for 15 minutes. Additional hardening includes Helmet security headers, CORS restricted to the configured frontend origin with credentials, Zod schema validation on all auth inputs, an IP-based rate limiter (5 attempts per 15 minutes) on auth endpoints, and \texttt{trust proxy} configured for a single proxy hop so the rate limiter works correctly behind the hosting provider's proxy. The SSE generation endpoint accepts the access token as a query parameter because the \texttt{EventSource} API cannot set authorization headers.
@@ -657,15 +677,22 @@ The implemented system successfully realises the full pipeline envisioned in the
 Testing the system spans two complementary levels: (i) the artifacts the system \emph{generates} for a user's project (the functional and security test cases produced by stages 5 and 6, documented in IEEE 829 form), and (ii) the verification of the platform itself through an automated unit/integration test suite. This chapter focuses on the latter, together with the evaluation strategy for the non-functional requirements.
 
 \section{Automated Test Suite}
-The backend is covered by a Jest test suite executed with \texttt{npm test} (\texttt{jest --runInBand}). The suite mocks the database and token service so routes are tested in isolation, and uses \texttt{supertest} to drive the Express application. At the time of writing, the suite comprises \textbf{two test suites and 24 passing tests}.
+The backend is covered by a Jest test suite executed with \texttt{npm test} (\texttt{jest --runInBand}). The suite mocks the database and token service so routes are tested in isolation, and uses \texttt{supertest} to drive the Express application. At the time of writing, the suite comprises \textbf{nine test suites and 94 passing tests}.
 
-\begin{longtable}{L{3.2cm} L{2cm} L{7.5cm}}
+\begin{longtable}{L{3.4cm} L{1.4cm} L{8cm}}
 \caption{Automated test coverage}\\
 \toprule
 \textbf{Suite} & \textbf{Tests} & \textbf{What is verified} \\
 \midrule
 \endhead
 Authentication routes & 9 & Registration validation (missing fields, short password), duplicate-email rejection (409), successful registration (201 + access token), login with valid/invalid credentials, non-existent user, and logout cookie clearing. \\
+Auth middleware & 4 & Rejection of missing/invalid/expired bearer tokens and acceptance of a valid token with the decoded user attached to the request. \\
+Project routes & 9 & Project create/list/read/soft-delete, ownership enforcement, validation of name/description bounds, and optional metadata and UI-preference payloads. \\
+Token service & 8 & Refresh-token issuance, SHA-256 hashing, rotation, family-based revocation on reuse, and expiry handling. \\
+Pipeline service & 4 & Orchestration flow, stage sequencing, and resumability (skipping stages whose artifact already exists). \\
+Pipeline helpers & 26 & Screen categorisation, distinct-screen selection (dedup/backfill/limit), Mermaid sanitisation, deterministic accent-scale construction, the indigo-remap accent config, and HTML completeness validation. \\
+Metrics service & 12 & Coverage and traceability metric calculations over requirements and test cases. \\
+UI preferences & 7 & Mapping of preference fields to prompt guidance, custom-colour handling, and omission of empty/``AI-chooses'' values. \\
 Export service & 15 & LaTeX document structure (title page, front matter, numbered chapters), colour palette and styled headings, requirement tables, balanced \texttt{xltabular}/\texttt{itemize}/\texttt{enumerate} environments, folding of acceptance criteria and controls into rows, and CSV header/row correctness and counts. \\
 \bottomrule
 \end{longtable}
@@ -690,7 +717,7 @@ Measured against the objectives in Section~1.3, the project met each one: an AI 
 The system's output quality is bounded by the underlying language models and by the detail of the user's input; vague descriptions yield thinner specifications, which the pipeline detects and reports rather than masks. Generation latency and throughput are constrained by third-party API rate limits, particularly on free tiers, and the generated UI code is intended as a low-fidelity prototype rather than a finished application. Non-functional targets such as concurrent-user load and full WCAG~2.1~AA conformance are specified but require dedicated evaluation runs to confirm.
 
 \section{Future Work}
-Promising extensions include: an administrative dashboard for usage monitoring and user management; richer in-app editing and re-generation of individual artifacts; iterative refinement loops where the model critiques and improves its own output; export to additional formats and direct integration with issue trackers and design tools; fine-tuning or retrieval augmentation on domain-specific requirements corpora to improve accuracy; broadening the security analysis beyond the OWASP Top 10 to standards such as ASVS; and automated execution of the generated functional test cases against the generated UI.
+Promising extensions include: an administrative dashboard for usage monitoring and user management; extending the natural-language refinement already available for the UI artifact to the textual artifacts (requirements and test cases); iterative refinement loops where the model critiques and improves its own output without user prompting; export to additional formats and direct integration with issue trackers and design tools; fine-tuning or retrieval augmentation on domain-specific requirements corpora to improve accuracy; broadening the security analysis beyond the OWASP Top 10 to standards such as ASVS; and automated execution of the generated functional test cases against the generated UI.
 
 % ============================================================
 \begin{thebibliography}{9}

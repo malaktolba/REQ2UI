@@ -14,6 +14,7 @@ thesis/
 │  ├─ usecase.png
 │  ├─ sequence.png
 │  ├─ activity.png
+│  ├─ uicode.png       # Stage 10 UI-code generation pipeline
 │  └─ src/             # editable PlantUML sources (.puml)
 ├─ tools/
 │  └─ plantuml.jar     # PlantUML renderer (gitignored; auto-downloaded on first render)

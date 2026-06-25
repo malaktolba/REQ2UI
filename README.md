@@ -25,6 +25,17 @@ Paste a project description and Req2UI streams through 10 pipeline stages, gener
 
 Artifacts are viewable in an IEEE 830-structured SRS document tab and individually, with export to **PDF**, **DOCX**, **CSV**, and **LaTeX**.
 
+### UI code generation (Stage 10)
+
+Stage 10 is a two-pass Gemini process designed for coherent, realistic prototypes:
+
+- **Shared design system + component kit** — pass one produces a navbar, footer, and a reusable set of canonical Tailwind class strings (buttons, inputs, cards, badges, tables, empty states) that every screen reuses verbatim, so pages stay visually consistent instead of drifting.
+- **Shared sample data** — realistic, domain-appropriate records are generated once and threaded through every screen, so the same entities recur and the app feels connected.
+- **Requirement grounding** — each screen's prompt is grounded in its components and the functional requirements relevant to it (with a sensible fallback), plus rules for Lucide icons, accessibility (landmarks, `aria`, AA contrast), responsiveness, and loading/empty/error states.
+- **Deterministic theming** — the accent is owned by code: picking a custom primary colour derives a full 50–900 scale and remaps Tailwind's `indigo`, so the whole app recolours reliably. The preview also offers **instant, no-AI recolor** across accent swatches.
+- **Robustness** — generated HTML is validated for completeness and regenerated once at a larger token budget if truncated.
+- **Post-generation refinement** — refine the result with natural-language instructions scoped to a page, several pages, or the whole design system; changes are previewed as a pending revision before being applied, discarded, or rolled back via revision history.
+
 ---
 
 ## Tech Stack
@@ -140,10 +151,18 @@ Academic deliverables live alongside the code:
 | POST | `/api/auth/logout` | Clear cookies |
 | GET | `/api/auth/me` | Current user |
 | GET | `/api/projects` | List user's projects |
-| POST | `/api/projects` | Create project |
+| POST | `/api/projects` | Create project (optional `metadata`, `ui_preferences`) |
 | GET | `/api/projects/:id` | Get project + stage statuses |
+| PUT | `/api/projects/:id` | Update project name / metadata |
 | DELETE | `/api/projects/:id` | Soft delete |
 | GET | `/api/projects/:id/generate` | Run pipeline — SSE stream (`?token=<jwt>`) |
+| GET | `/api/projects/:id/generate/ui-code` | Re-run only Stage 10 (UI code) — SSE |
+| GET | `/api/projects/:id/refine` | AI-refine generated UI — SSE (`?prompt=&scope=`) |
+| POST | `/api/projects/:id/ui-code/apply` | Apply the pending refined UI |
+| POST | `/api/projects/:id/ui-code/discard` | Discard the pending refined UI |
+| GET | `/api/projects/:id/ui-code/revisions` | List UI revision history |
+| POST | `/api/projects/:id/ui-code/revisions/:version/restore` | Roll back to a UI revision |
+| GET | `/api/projects/:id/ui-code/suggestions` | Suggested refinement prompts |
 | GET | `/api/projects/:id/artifacts` | All artifacts |
 | GET | `/api/projects/:id/artifacts/:type` | Single artifact |
 | POST | `/api/projects/:id/export/pdf` | Export PDF (body: `{ diagramSvgs }`) |

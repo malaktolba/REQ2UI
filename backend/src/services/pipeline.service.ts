@@ -245,6 +245,71 @@ export function selectDistinctScreens(screens: any[], limit: number): any[] {
   return picked.slice(0, limit);
 }
 
+// ── Stage 10 helpers: deterministic accent palette + output validation ──────
+
+/** Parse a #rrggbb / #rgb hex into RGB; null if unparseable. */
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  let h = hex.trim().replace(/^#/, "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+}
+
+const toHex = (n: number) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, "0");
+
+/** Mix a colour toward a target (white/black) by ratio 0..1, returns #rrggbb. */
+function mix(c: { r: number; g: number; b: number }, t: { r: number; g: number; b: number }, ratio: number): string {
+  return `#${toHex(c.r + (t.r - c.r) * ratio)}${toHex(c.g + (t.g - c.g) * ratio)}${toHex(c.b + (t.b - c.b) * ratio)}`;
+}
+
+// Standard Tailwind indigo scale — the default brand accent when the user
+// hasn't picked a custom colour.
+const DEFAULT_INDIGO: Record<string, string> = {
+  "50": "#eef2ff", "100": "#e0e7ff", "200": "#c7d2fe", "300": "#a5b4fc", "400": "#818cf8",
+  "500": "#6366f1", "600": "#4f46e5", "700": "#4338ca", "800": "#3730a3", "900": "#312e81",
+};
+
+/** Build a full 50–900 scale from a single base hex (base sits at 500). */
+export function buildAccentScale(baseHex: string): Record<string, string> {
+  const base = hexToRgb(baseHex);
+  if (!base) return DEFAULT_INDIGO;
+  const white = { r: 255, g: 255, b: 255 };
+  const black = { r: 0, g: 0, b: 0 };
+  return {
+    "50": mix(base, white, 0.92), "100": mix(base, white, 0.84), "200": mix(base, white, 0.68),
+    "300": mix(base, white, 0.48), "400": mix(base, white, 0.26),
+    "500": `#${toHex(base.r)}${toHex(base.g)}${toHex(base.b)}`,
+    "600": mix(base, black, 0.12), "700": mix(base, black, 0.26), "800": mix(base, black, 0.40), "900": mix(base, black, 0.52),
+  };
+}
+
+/**
+ * The brand accent is always emitted as Tailwind's `indigo-*` utilities so the
+ * preview's instant-recolor (which remaps `indigo`) keeps working. When the user
+ * picked a custom primary colour we *redefine* the indigo scale to that colour
+ * via the Play-CDN config, so `indigo-600` literally renders as their colour.
+ * Code owns this script (not the LLM) for deterministic, always-valid output.
+ */
+export function accentConfigScript(prefs?: UIPreferences): string {
+  const custom = prefs?.color_mode === "custom" ? prefs.primary_color?.trim() : "";
+  const scale = custom ? buildAccentScale(custom) : DEFAULT_INDIGO;
+  return `<script>tailwind.config={theme:{extend:{colors:{indigo:${JSON.stringify(scale)}}}}}</script>`;
+}
+
+/**
+ * Heuristic "did the model return a usable, complete page?" check — guards
+ * against silent truncation at the maxOutputTokens ceiling.
+ */
+export function htmlLooksComplete(html: string): boolean {
+  if (!html || html.length < 400) return false;
+  const lower = html.toLowerCase();
+  if (!lower.includes("</body>") && !lower.includes("</html>")) return false;
+  // Crude balance check: a truncated doc usually has far more "<" than ">".
+  const open = (html.match(/</g) ?? []).length;
+  const close = (html.match(/>/g) ?? []).length;
+  return close >= open - 2;
+}
+
 async function generateUICodeMultipass(
   projectId: string,
   projectName: string,
@@ -279,41 +344,72 @@ async function generateUICodeMultipass(
       .map((sc: any) => `${sc.name}: ${sc.route ?? "/" + sc.id.toLowerCase()}`)
       .join(" | ");
 
-    // ── Pass 1: Design system ─────────────────────────────────────────────
+    // The brand accent is owned by code (deterministic, valid) — when the user
+    // picked a custom primary colour it redefines Tailwind's `indigo` scale.
+    const accentScript = accentConfigScript(uiPreferences);
+
+    // ── Pass 1: Design system — navbar, footer, plus a reusable component
+    //    class kit + shared sample data so every screen stays consistent. ────
     const designSystem = await callGeminiJSON(
-      `You are a senior UI designer. Create a cohesive HTML design system for a web app.
+      `You are a senior UI designer. Create a cohesive HTML design system + reusable component class kit for a web app.
 Return a JSON object with exactly this shape:
 {
   "navbar": "<full navbar HTML using Tailwind classes>",
   "footer": "<footer HTML using Tailwind classes>",
-  "tailwind_config": "<script>tailwind.config={theme:{extend:{colors:{primary:{'50':'#eef2ff','100':'#e0e7ff','500':'#6366f1','600':'#4f46e5','700':'#4338ca'}}}}}</script>",
-  "body_classes": "bg-slate-950 text-slate-100 min-h-screen flex flex-col"
+  "body_classes": "bg-slate-950 text-slate-100 min-h-screen flex flex-col",
+  "components": {
+    "button_primary": "<exact Tailwind class string for a primary button>",
+    "button_secondary": "<class string for a secondary/ghost button>",
+    "input": "<class string for text inputs/selects/textareas>",
+    "label": "<class string for form labels>",
+    "card": "<class string for a content card/panel>",
+    "badge": "<class string for a small status badge/pill>",
+    "table": "<class string for a <table> element>",
+    "th": "<class string for table header cells>",
+    "td": "<class string for table body cells>",
+    "empty_state": "<class string for an empty-state container>"
+  },
+  "sample_data": { "<entity>": [ { "<field>": "<value>" } ] }
 }
 
 Design rules:
-- Dark theme: bg-slate-950 page, bg-slate-900 surfaces, slate-800 borders, indigo-600 primary
+- Dark theme by default: bg-slate-950 page, bg-slate-900 surfaces, slate-800 borders, indigo-600 as the brand/primary accent
+- The component class strings are the SINGLE source of truth — every screen reuses them verbatim so the whole app looks consistent. Make each one complete: colour, padding, radius, border, hover/focus, transition.
 - Navbar: fixed top, logo left, navigation links center/right, user avatar right
 - Navigation links must include ALL these screens: ${routeMap}
 - Footer: simple 1-line with project name and copyright
-- Use real, project-appropriate link text (not placeholders)${prefsBlock}`,
-      `Project: ${projectName}\nSystem: ${s1.system_summary}`,
+- Use real, project-appropriate link text (not placeholders)
+- sample_data: 3–5 realistic, domain-appropriate records for the main entities in this system (real names/numbers/dates, NOT Lorem Ipsum). Screens reuse these exact records so the app feels real and connected.${prefsBlock}`,
+      `Project: ${projectName}\nSystem: ${s1.system_summary}\nActors: ${s1.actors?.join(", ") ?? ""}`,
       8000
     );
 
+    const kit = (designSystem.components ?? {}) as Record<string, unknown>;
+    const componentKit = Object.entries(kit)
+      .filter(([, v]) => typeof v === "string" && (v as string).trim())
+      .map(([k, v]) => `- ${k}: ${v}`)
+      .join("\n");
+    const sampleData = designSystem.sample_data
+      ? JSON.stringify(designSystem.sample_data).slice(0, 2000)
+      : "";
+
     // ── Pass 2: Per-screen HTML generation (batches of 3) ─────────────────
+    const allFrs: string[] = (s2.requirements ?? []).map((r: any) => `${r.id}: ${r.title} — ${r.description}`);
     const frByScreen: Record<string, string[]> = {};
     for (const sc of screens) {
       const relevant = (s2.requirements ?? [])
         .filter((r: any) =>
           sc.components?.some((c: any) =>
             r.title?.toLowerCase().split(" ").some((w: string) =>
-              c.label?.toLowerCase().includes(w) || c.purpose?.toLowerCase().includes(w)
+              w.length > 3 && (c.label?.toLowerCase().includes(w) || c.purpose?.toLowerCase().includes(w))
             )
           )
         )
         .slice(0, 4)
         .map((r: any) => `${r.id}: ${r.title} — ${r.description}`);
-      frByScreen[sc.id] = relevant;
+      // Fall back to a few general requirements rather than leaving the model
+      // to invent the screen's purpose from nothing.
+      frByScreen[sc.id] = relevant.length ? relevant : allFrs.slice(0, 3);
     }
 
     const generatedScreens: any[] = [];
@@ -323,48 +419,63 @@ Design rules:
       const batch = screens.slice(i, i + BATCH);
       const batchResults = await Promise.all(
         batch.map(async (sc: any) => {
-          const components = (sc.components ?? [])
+          const componentsList = (sc.components ?? [])
             .map((c: any) => `- ${c.type}: "${c.label}"${c.purpose ? ` (${c.purpose})` : ""}`)
             .join("\n");
           const frs = frByScreen[sc.id]?.join("\n") ?? "";
 
-          const html = await callGeminiText(
-            `You are an expert frontend developer. Generate a COMPLETE, polished, production-quality HTML page.
+          const systemPrompt = `You are an expert frontend developer. Generate a COMPLETE, polished, production-quality HTML page.
 
-DESIGN SYSTEM (use exactly as provided):
+DESIGN SYSTEM (use exactly as provided — do not restyle):
 ${designSystem.navbar ? `Navbar:\n${designSystem.navbar}` : ""}
 ${designSystem.footer ? `Footer:\n${designSystem.footer}` : ""}
-${designSystem.tailwind_config ?? ""}
 Body classes: ${designSystem.body_classes ?? "bg-slate-950 text-slate-100 min-h-screen flex flex-col"}
+
+REUSABLE COMPONENT CLASSES (apply these EXACT class strings so every screen is visually consistent):
+${componentKit || "— (none provided; keep styling consistent and minimal)"}
+
+SHARED SAMPLE DATA (reuse these exact records where relevant so the app feels connected):
+${sampleData || "— (invent realistic, domain-appropriate data)"}
 
 NAVIGATION ROUTES (use as href values):
 ${routeMap}
 
 CODING RULES:
 1. Output ONLY the complete HTML document — no markdown, no explanation, no code fences
-2. <head> must include: Tailwind CDN script, the provided tailwind_config script, any <style> blocks
+2. <head> must include, in this order: <script src="https://cdn.tailwindcss.com"></script>, then this EXACT accent config script: ${accentScript}, then <script src="https://unpkg.com/lucide@latest"></script>, then any <style> blocks
 3. <body> must start with the navbar HTML, end with the footer HTML, main content between them
-4. Use realistic, domain-appropriate data (names, numbers, dates) — NOT Lorem Ipsum
-5. Every UI component listed must be visually present on the page
-6. Forms: include proper labels, placeholders, validation attributes; no real submission needed
-7. Tables: use realistic sample rows (3–5 rows minimum)
-8. Mobile-responsive: use Tailwind responsive prefixes (sm:, md:, lg:)
-9. Hover/focus states on interactive elements
-10. Include at least one piece of JavaScript for a small interaction (e.g., dropdown, modal toggle, tab switch)${prefsBlock}`,
-            `Screen: ${sc.name}
+4. Reuse the component classes above for every button, input, card, badge, and table — do NOT invent new styles for those
+5. Icons: use Lucide via <i data-lucide="icon-name"></i>, and call lucide.createIcons() in a <script> just before </body>
+6. Use realistic, domain-appropriate data (names, numbers, dates) — NOT Lorem Ipsum; prefer the shared sample data above
+7. Every UI component listed must be visually present on the page
+8. Forms: <label> tied to its input via for/id, placeholders, validation attributes; no real submission needed
+9. Tables: realistic sample rows (3–5 rows minimum)
+10. Include relevant states where they apply: a loading skeleton, an empty state, or an error/validation message
+11. Accessibility: semantic landmarks (<header>/<nav>/<main>/<footer>), aria-label on icon-only buttons, labels tied to inputs, and AA-contrast text
+12. Mobile-responsive: use Tailwind responsive prefixes (sm:, md:, lg:)
+13. Hover/focus states on interactive elements
+14. At least one piece of JavaScript for a small interaction (e.g., dropdown, modal toggle, tab switch)${prefsBlock}`;
+
+          const userPrompt = `Screen: ${sc.name}
 Route: ${sc.route ?? ""}
 Description: ${sc.description ?? ""}
 
 Required components:
-${components}
+${componentsList}
 
 Related functional requirements:
 ${frs || "— (use general context)"}
 
 Project: ${projectName}
 Actors: ${s1.actors?.join(", ")}
-System: ${s1.system_summary}`
-          );
+System: ${s1.system_summary}`;
+
+          // Larger budget than before to avoid mid-tag truncation on dense pages;
+          // one repair retry with a bigger cap if the first draft looks cut off.
+          let html = await callGeminiText(systemPrompt, userPrompt, 16000);
+          if (!htmlLooksComplete(html)) {
+            html = await callGeminiText(systemPrompt, userPrompt, 24000);
+          }
 
           completedCount++;
           emit({
@@ -392,6 +503,7 @@ System: ${s1.system_summary}`
         navbar: designSystem.navbar,
         footer: designSystem.footer,
         body_classes: designSystem.body_classes,
+        components: kit,
       },
       screens: generatedScreens,
     };

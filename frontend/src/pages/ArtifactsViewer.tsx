@@ -662,11 +662,49 @@ const VIEWPORT_ICONS: Record<Viewport, string> = {
   mobile: "▯",
 };
 
+// ── Instant accent recolour (no AI call) ────────────────────────────────────
+// Generated screens use Tailwind's `indigo-*` utility classes as their accent.
+// We can remap the whole `indigo` scale live inside the preview iframe — two
+// ways at once for robustness: (1) reconfigure the Tailwind Play CDN so every
+// indigo utility/variant recompiles, and (2) a deterministic !important CSS
+// fallback covering the common utilities in case the CDN doesn't re-run.
+const ACCENT_PALETTES: Record<string, Record<number, string>> = {
+  Indigo:  { 50: "#eef2ff", 100: "#e0e7ff", 200: "#c7d2fe", 300: "#a5b4fc", 400: "#818cf8", 500: "#6366f1", 600: "#4f46e5", 700: "#4338ca", 800: "#3730a3", 900: "#312e81" },
+  Violet:  { 50: "#f5f3ff", 100: "#ede9fe", 200: "#ddd6fe", 300: "#c4b5fd", 400: "#a78bfa", 500: "#8b5cf6", 600: "#7c3aed", 700: "#6d28d9", 800: "#5b21b6", 900: "#4c1d95" },
+  Blue:    { 50: "#eff6ff", 100: "#dbeafe", 200: "#bfdbfe", 300: "#93c5fd", 400: "#60a5fa", 500: "#3b82f6", 600: "#2563eb", 700: "#1d4ed8", 800: "#1e40af", 900: "#1e3a8a" },
+  Emerald: { 50: "#ecfdf5", 100: "#d1fae5", 200: "#a7f3d0", 300: "#6ee7b7", 400: "#34d399", 500: "#10b981", 600: "#059669", 700: "#047857", 800: "#065f46", 900: "#064e3b" },
+  Teal:    { 50: "#f0fdfa", 100: "#ccfbf1", 200: "#99f6e4", 300: "#5eead4", 400: "#2dd4bf", 500: "#14b8a6", 600: "#0d9488", 700: "#0f766e", 800: "#115e59", 900: "#134e4a" },
+  Rose:    { 50: "#fff1f2", 100: "#ffe4e6", 200: "#fecdd3", 300: "#fda4af", 400: "#fb7185", 500: "#f43f5e", 600: "#e11d48", 700: "#be123c", 800: "#9f1239", 900: "#881337" },
+  Amber:   { 50: "#fffbeb", 100: "#fef3c7", 200: "#fde68a", 300: "#fcd34d", 400: "#fbbf24", 500: "#f59e0b", 600: "#d97706", 700: "#b45309", 800: "#92400e", 900: "#78350f" },
+};
+const ACCENT_NAMES = Object.keys(ACCENT_PALETTES);
+
+function accentInjection(accent: string): string {
+  const pal = ACCENT_PALETTES[accent];
+  if (!pal || accent === "Indigo") return ""; // Indigo is the original look
+  // (1) Reconfigure the Play CDN — merges our indigo over the page's config and
+  // reassigns tailwind.config, which triggers a recompile of every utility.
+  const script = `<script>(function(){function go(){if(!window.tailwind){return setTimeout(go,15);}var c=window.tailwind.config||{};c.theme=c.theme||{};c.theme.extend=c.theme.extend||{};c.theme.extend.colors=Object.assign({},c.theme.extend.colors,{indigo:${JSON.stringify(pal)}});window.tailwind.config=c;}go();})();<\/script>`;
+  // (2) Deterministic CSS fallback for the most common indigo utilities.
+  let css = "";
+  for (const [s, hex] of Object.entries(pal)) {
+    css +=
+      `.bg-indigo-${s}{background-color:${hex}!important}.hover\\:bg-indigo-${s}:hover{background-color:${hex}!important}.focus\\:bg-indigo-${s}:focus{background-color:${hex}!important}` +
+      `.text-indigo-${s}{color:${hex}!important}.hover\\:text-indigo-${s}:hover{color:${hex}!important}.group:hover .group-hover\\:text-indigo-${s}{color:${hex}!important}` +
+      `.border-indigo-${s}{border-color:${hex}!important}.hover\\:border-indigo-${s}:hover{border-color:${hex}!important}.focus\\:border-indigo-${s}:focus{border-color:${hex}!important}` +
+      `.ring-indigo-${s}{--tw-ring-color:${hex}!important}.focus\\:ring-indigo-${s}:focus{--tw-ring-color:${hex}!important}` +
+      `.from-indigo-${s}{--tw-gradient-from:${hex}!important;--tw-gradient-to:${hex}00!important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)!important}.to-indigo-${s}{--tw-gradient-to:${hex}!important}.via-indigo-${s}{--tw-gradient-stops:var(--tw-gradient-from),${hex},var(--tw-gradient-to)!important}` +
+      `.fill-indigo-${s}{fill:${hex}!important}.stroke-indigo-${s}{stroke:${hex}!important}.divide-indigo-${s}>:not([hidden])~:not([hidden]){border-color:${hex}!important}`;
+  }
+  return `${script}<style>${css}</style>`;
+}
+
 // In the preview iframe, the page's relative links (e.g. href="/tasks") resolve
 // against our app's origin and would navigate the frame into our SPA. Inject a
 // guard that neutralizes link navigation and form submits for the preview only,
 // while leaving in-page (#) anchors and JS interactions (modals, tabs) working.
-function previewDoc(html: string): string {
+// `accent` optionally remaps the indigo accent scale live (no AI call).
+function previewDoc(html: string, accent: string = "Indigo"): string {
   const guard = `<script>(function(){
     document.addEventListener('click',function(e){
       var a=e.target&&e.target.closest&&e.target.closest('a');
@@ -674,7 +712,12 @@ function previewDoc(html: string): string {
     },true);
     document.addEventListener('submit',function(e){e.preventDefault();},true);
   })();<\/script>`;
-  return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, guard + "</body>") : html + guard;
+  let out = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, guard + "</body>") : html + guard;
+  const accentTags = accentInjection(accent);
+  if (accentTags) {
+    out = /<\/head>/i.test(out) ? out.replace(/<\/head>/i, accentTags + "</head>") : accentTags + out;
+  }
+  return out;
 }
 
 function UICodeView({ data, pending, projectId, onRefreshed }: {
@@ -689,6 +732,7 @@ function UICodeView({ data, pending, projectId, onRefreshed }: {
   const [selected, setSelected] = useState<string | null>(screens[0]?.id ?? null);
   const [tab, setTab] = useState<"preview" | "code">("preview");
   const [viewport, setViewport] = useState<Viewport>("desktop");
+  const [accent, setAccent] = useState<string>("Indigo"); // instant preview recolour, no AI
   const [copied, setCopied] = useState(false);
 
   // When a preview appears, jump to the first changed screen so the edit is visible.
@@ -738,21 +782,11 @@ function UICodeView({ data, pending, projectId, onRefreshed }: {
 
   return (
     <div className="space-y-4">
-      {/* AI refinement controls */}
-      <UIRefinementPanel
-        projectId={projectId}
-        screens={(data.screens ?? []).map((s: any) => ({ id: s.id, name: s.name, route: s.route }))}
-        currentScreenId={selected}
-        currentScreenName={screen?.name}
-        pending={pending}
-        onRefreshed={onRefreshed}
-      />
-
       {/* Preview banner while changes are staged */}
       {pending && (
         <div className="flex items-center gap-2 text-xs text-indigo-300 light:text-indigo-700 bg-indigo-500/10 light:bg-indigo-50 border border-indigo-500/30 light:border-indigo-200 rounded-lg px-3 py-2">
           <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse flex-shrink-0" />
-          Previewing proposed changes — not yet saved. Apply or discard above.
+          Previewing proposed changes — not yet saved. Apply or discard below.
         </div>
       )}
 
@@ -802,6 +836,22 @@ function UICodeView({ data, pending, projectId, onRefreshed }: {
                 </div>
               )}
 
+              {/* Instant accent recolour (preview only, no AI call) */}
+              {tab === "preview" && (
+                <div className="flex items-center gap-1 bg-slate-800 light:bg-slate-100 rounded-lg px-1.5 py-1" title="Switch accent colour (preview only)">
+                  {ACCENT_NAMES.map((name) => (
+                    <button
+                      key={name}
+                      onClick={() => setAccent(name)}
+                      title={`${name} accent`}
+                      aria-label={`${name} accent`}
+                      className={`w-4 h-4 rounded-full transition ${accent === name ? "ring-2 ring-offset-1 ring-offset-slate-800 light:ring-offset-slate-100 ring-white light:ring-slate-600" : "opacity-70 hover:opacity-100"}`}
+                      style={{ background: ACCENT_PALETTES[name][500] }}
+                    />
+                  ))}
+                </div>
+              )}
+
               {screen.route && (
                 <span className="text-xs text-slate-500 font-mono bg-slate-800 light:bg-slate-100 px-2 py-0.5 rounded">{screen.route}</span>
               )}
@@ -846,8 +896,8 @@ function UICodeView({ data, pending, projectId, onRefreshed }: {
                   </div>
                 </div>
                 <iframe
-                  key={`${screen.id}-${viewport}`}
-                  srcDoc={previewDoc(screen.html)}
+                  key={`${screen.id}-${viewport}-${accent}`}
+                  srcDoc={previewDoc(screen.html, accent)}
                   sandbox="allow-scripts allow-same-origin"
                   title={screen.name}
                   onLoad={(e) => {
@@ -858,7 +908,7 @@ function UICodeView({ data, pending, projectId, onRefreshed }: {
                     try {
                       const href = f.contentWindow?.location?.href ?? "";
                       if (href.startsWith(window.location.origin)) {
-                        f.srcdoc = previewDoc(screen.html);
+                        f.srcdoc = previewDoc(screen.html, accent);
                       }
                     } catch {
                       /* cross-origin after nav → not our app, ignore */
@@ -886,6 +936,17 @@ function UICodeView({ data, pending, projectId, onRefreshed }: {
           </span>
         )}
       </div>
+
+      {/* AI refinement controls — kept below the preview so the generated UI is
+          front-and-centre; users drop down here only when they want to tweak it. */}
+      <UIRefinementPanel
+        projectId={projectId}
+        screens={(data.screens ?? []).map((s: any) => ({ id: s.id, name: s.name, route: s.route }))}
+        currentScreenId={selected}
+        currentScreenName={screen?.name}
+        pending={pending}
+        onRefreshed={onRefreshed}
+      />
     </div>
   );
 }

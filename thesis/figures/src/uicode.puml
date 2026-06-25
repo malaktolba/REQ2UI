@@ -1,0 +1,69 @@
+@startuml uicode
+' Figure 7 - Stage 10 UI Code Generation (two-pass, with grounding and validation)
+skinparam backgroundColor White
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+skinparam ArrowColor #2F5C8F
+skinparam activity {
+  BackgroundColor #F4F7FB
+  BorderColor #2F5C8F
+  FontColor #1B3A5B
+  DiamondBackgroundColor #DCE8F6
+  DiamondBorderColor #2F5C8F
+}
+
+title Req2UI - Stage 10 UI Code Generation (Gemini)
+
+start
+:Load artifacts: extraction (S1),
+functional requirements (S2),
+wireframes (S7), UI preferences;
+
+:selectDistinctScreens()
+- categorise each wireframe screen
+- drop near-duplicates (e.g. login vs register)
+- cap at 6 functionally distinct screens;
+
+:Build accent config (deterministic, code-owned)
+- default: standard Tailwind indigo scale
+- custom colour: redefine indigo 50-900
+  from the user's hex (buildAccentScale);
+
+partition "Pass 1 - Design system (1 Gemini call)" {
+  :Generate shared design system (JSON):
+  navbar, footer, body classes,
+  reusable component class kit
+  (button/input/card/badge/table/...),
+  shared realistic sample data;
+}
+
+partition "Pass 2 - Per-screen HTML (batches of 3, concurrent)" {
+  while (more screens?) is (yes)
+    :Select next screen;
+    :Collect required components;
+    :Match functional requirements to the screen
+    (fall back to top general FRs if none match);
+    :Assemble prompt = design system
+    + component class kit + sample data
+    + accent config + Lucide icons
+    + accessibility + loading/empty/error states;
+    :Generate HTML (budget 16k tokens);
+    if (htmlLooksComplete?) then (no)
+      :Repair retry (budget 24k tokens);
+    else (yes)
+    endif
+    :Emit SSE progress {screen done};
+  endwhile (no)
+}
+
+:Upsert ui_code artifact (design system + screens);
+:Stream SSE {stage 10 complete};
+
+partition "Preview and refinement (frontend)" {
+  :Instant accent recolor in preview
+  (remap indigo via Tailwind config + CSS, no AI call);
+  :Optional AI refinement
+  (page / pages / whole design system);
+}
+stop
+@enduml

@@ -20,8 +20,10 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Landing />} />
+            {/* Login stays reachable when signed in so users can switch
+                accounts; the page itself shows an account chooser. */}
+            <Route path="/login" element={<Login />} />
             <Route element={<GuestRoute />}>
-              <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
             </Route>
             <Route element={<ProtectedRoute />}>

@@ -1,4 +1,11 @@
-import { screenCategory, selectDistinctScreens, sanitizeMermaid } from "../services/pipeline.service";
+import {
+  screenCategory,
+  selectDistinctScreens,
+  sanitizeMermaid,
+  buildAccentScale,
+  accentConfigScript,
+  htmlLooksComplete,
+} from "../services/pipeline.service";
 
 describe("screenCategory", () => {
   it.each([
@@ -75,5 +82,53 @@ describe("sanitizeMermaid", () => {
   it("passes non-string values through untouched", () => {
     expect(sanitizeMermaid(undefined)).toBeUndefined();
     expect(sanitizeMermaid(42 as any)).toBe(42);
+  });
+});
+
+describe("buildAccentScale", () => {
+  it("returns a full 50–900 scale with the base at 500", () => {
+    const scale = buildAccentScale("#14b8a6");
+    expect(Object.keys(scale)).toEqual(["50", "100", "200", "300", "400", "500", "600", "700", "800", "900"]);
+    expect(scale["500"]).toBe("#14b8a6"); // base sits at 500
+    // Lighter shades tend toward white, darker toward black.
+    expect(scale["50"].toLowerCase()).not.toBe(scale["900"].toLowerCase());
+  });
+
+  it("accepts shorthand 3-digit hex", () => {
+    expect(buildAccentScale("#0af")["500"]).toBe("#00aaff");
+  });
+
+  it("falls back to the default indigo scale on an unparseable colour", () => {
+    expect(buildAccentScale("not-a-color")["500"]).toBe("#6366f1");
+  });
+});
+
+describe("accentConfigScript", () => {
+  it("emits the standard indigo scale when no custom colour is set", () => {
+    expect(accentConfigScript(undefined)).toContain("#6366f1");
+    expect(accentConfigScript({ color_mode: "light" })).toContain("#6366f1");
+  });
+
+  it("redefines indigo to the custom primary colour", () => {
+    const script = accentConfigScript({ color_mode: "custom", primary_color: "#14b8a6" });
+    expect(script).toContain("#14b8a6");
+    expect(script).toContain("indigo");
+  });
+});
+
+describe("htmlLooksComplete", () => {
+  it("accepts a well-formed page", () => {
+    const html = "<!doctype html><html><head></head><body>" + "x".repeat(500) + "</body></html>";
+    expect(htmlLooksComplete(html)).toBe(true);
+  });
+
+  it("rejects an empty or tiny string", () => {
+    expect(htmlLooksComplete("")).toBe(false);
+    expect(htmlLooksComplete("<div>")).toBe(false);
+  });
+
+  it("rejects a page truncated before </body>", () => {
+    const html = "<html><body>" + "<div>".repeat(300); // many unclosed tags, no closing body
+    expect(htmlLooksComplete(html)).toBe(false);
   });
 });
