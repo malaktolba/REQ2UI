@@ -6,6 +6,7 @@ import api from "../api/axios";
 import { CheckIcon, ArrowRight, ChevronDown, ArrowLeft } from "../components/Icons";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { UIRefinementPanel } from "../components/UIRefinementPanel";
+import { QualityReport } from "../components/QualityReport";
 import { useToast } from "../context/ToastContext";
 import { LoadingScreen } from "../components/LoadingScreen";
 
@@ -23,6 +24,7 @@ const TABS = [
   { key: "ui_code",                   label: "UI Code",           short: "UI"  },
   { key: "uml_diagrams",             label: "Diagrams",          short: "UML" },
   { key: "traceability_matrix",       label: "Traceability",      short: "TM"  },
+  { key: "quality_report",            label: "Quality",           short: "QA"  },
 ] as const;
 
 type TabKey = typeof TABS[number]["key"];
@@ -1553,6 +1555,9 @@ export default function ArtifactsViewer() {
             const available =
               tab.key === "srs_document"
                 ? srsReady
+                : tab.key === "quality_report"
+                // The quality report can be run as soon as the core SRS exists.
+                ? srsReady
                 : tab.key === "ui_code"
                 // Enable once wireframes exist so the tab can be opened to
                 // generate UI code, even before any ui_code artifact exists.
@@ -1629,15 +1634,19 @@ export default function ArtifactsViewer() {
         )}
 
         {/* Content */}
-        {!(activeTab === "ui_code" && !availableKeys.has("ui_code") && availableKeys.has("wireframes")) && (
-          <ArtifactContent
-            tabKey={activeTab}
-            content={artifactMap[activeTab]}
-            artifactMap={artifactMap}
-            projectName={project?.name}
-            projectId={id ?? ""}
-            onRefreshed={refreshArtifacts}
-          />
+        {activeTab === "quality_report" ? (
+          <QualityReport projectId={id ?? ""} />
+        ) : (
+          !(activeTab === "ui_code" && !availableKeys.has("ui_code") && availableKeys.has("wireframes")) && (
+            <ArtifactContent
+              tabKey={activeTab}
+              content={artifactMap[activeTab]}
+              artifactMap={artifactMap}
+              projectName={project?.name}
+              projectId={id ?? ""}
+              onRefreshed={refreshArtifacts}
+            />
+          )
         )}
       </div>
     </div>

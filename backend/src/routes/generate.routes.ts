@@ -4,6 +4,7 @@ import { sql } from "../db/client";
 import { requireAuth } from "../middleware/auth.middleware";
 import { runPipeline, regenerateUICode } from "../services/pipeline.service";
 import { refineUI, RefinementScope } from "../services/refinement.service";
+import { evaluateProject } from "../services/evaluation.service";
 
 const router = Router();
 
@@ -75,6 +76,18 @@ router.get("/:id/generate", requireAuth, genLimiter, async (req: Request, res: R
         uiPreferences: project.ui_preferences ?? undefined,
       }
     );
+
+    // GEval quality evaluation runs after generation as an independent step.
+    // It must NEVER block or fail the pipeline result — any error here is caught
+    // and reported as an evaluation event, while "done" still fires normally.
+    try {
+      send("evaluation", { status: "running" });
+      const evaluation = await evaluateProject(project.id, userId);
+      send("evaluation", { status: "completed", evaluation });
+    } catch (evalErr: any) {
+      send("evaluation", { status: "failed", error: evalErr?.message ?? "Evaluation failed" });
+    }
+
     send("done", { message: "Pipeline complete" });
   } catch (err: any) {
     send("error", { error: err?.message ?? "Pipeline failed" });

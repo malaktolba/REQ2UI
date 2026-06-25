@@ -8,6 +8,7 @@ import authRoutes from "./routes/auth.routes";
 import projectRoutes from "./routes/projects.routes";
 import generateRoutes from "./routes/generate.routes";
 import exportRoutes from "./routes/export.routes";
+import evaluationRoutes from "./routes/evaluation.routes";
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/projects", projectRoutes);
 app.use("/api/projects", generateRoutes);
 app.use("/api/projects", exportRoutes);
+app.use("/api/projects", evaluationRoutes);
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 

@@ -80,6 +80,16 @@ Pipeline is streamed to the frontend via **SSE** at `GET /api/projects/:id/gener
 
 Stage 10 uses two Gemini passes: (1) generate a shared design system (navbar, footer, Tailwind config), (2) generate HTML for each distinct screen category (auth, dashboard, settings, profile, create, list, report). `selectDistinctScreens()` deduplicates screens by category to avoid near-duplicate pages.
 
+### GEval Quality Evaluation
+
+After generation, an independent **GEval (LLM-as-a-Judge)** step grades artifact *quality* (separate from `metrics.service.ts`, which does rule-based conformance scoring). It does **not** generate or modify artifacts.
+
+- `backend/src/config/evaluation.ts` — version-controlled, configurable rubric: artifact weights (SRS 30%, UI 35%, UML 20%, tests 15%), per-artifact criteria with weights + checks, 1–5 scale, grade thresholds, and the judge prompt builder. Bump `EVALUATION_CONFIG_VERSION` on any rubric change.
+- `backend/src/services/evaluation.service.ts` — the GEval evaluator (`gevalEvaluator` implements the pluggable `Evaluator` interface). Judges each dimension via Groq in parallel, converts weighted 1–5 scores to percentages, and aggregates an overall % (re-normalising over evaluated dimensions only). Pure aggregation helpers (`aggregateArtifact`, `aggregateOverall`) are unit-tested. Missing artifacts / judge failures degrade gracefully (dimension marked un-evaluated) — evaluation **never blocks generation**.
+- Persisted per-project (history) in the `evaluations` table (append-only JSONB report).
+- Routes (`backend/src/routes/evaluation.routes.ts`): `POST /api/projects/:id/evaluate`, `GET .../evaluation` (latest), `GET .../evaluations` (history). The generate SSE stream also emits an `evaluation` event after the pipeline completes.
+- Frontend: `components/QualityReport.tsx` (overall ring, per-artifact cards, strengths/issues/recommendations) shown as the **Quality** tab in the Artifacts viewer and as a section on the completed project detail page.
+
 ### Authentication
 
 JWT-based with silent refresh:
@@ -90,13 +100,15 @@ JWT-based with silent refresh:
 - SSE endpoint accepts token via `?token=` query param (SSE can't set headers)
 - Axios interceptors in `frontend/src/api/axios.ts` handle silent 401 refresh with request queuing
 
-### Database Schema (6 tables)
+### Database Schema (8 tables)
 - `users` — auth + lockout fields
 - `refresh_tokens` — hashed tokens with family for theft detection
 - `projects` — user's projects with soft delete (`deleted_at`)
 - `artifacts` — JSONB content per type, UNIQUE(project_id, type), upserted each run
 - `pipeline_stages` — per-stage status tracking
 - `exports` — export file references
+- `ui_revisions` — UI-code version history for AI refinement (undo/restore)
+- `evaluations` — append-only GEval quality-evaluation history (JSONB report per run)
 
 ### Frontend Structure
 - `src/api/` — Axios client + per-resource helpers

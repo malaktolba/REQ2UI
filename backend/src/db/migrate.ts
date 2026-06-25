@@ -93,6 +93,31 @@ async function migrate() {
     )
   `;
 
+  // GEval quality-evaluation history. Each row is one evaluation run of a
+  // project's artifacts: the overall percentage + grade for quick listing, and
+  // the full structured report (per-artifact scores, strengths, issues,
+  // recommendations) in JSONB. `version` records the rubric/prompt version used,
+  // so historical scores stay interpretable as the criteria evolve. Kept separate
+  // from `artifacts` because evaluation is independent of generation and append-
+  // only (history per project), not an upserted single-row-per-type artifact.
+  await sql`
+    CREATE TABLE IF NOT EXISTS evaluations (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id    UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      method        TEXT NOT NULL DEFAULT 'geval',
+      version       TEXT NOT NULL,
+      overall_score INT  NOT NULL,
+      grade         TEXT NOT NULL,
+      report        JSONB NOT NULL,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS evaluations_project_created_idx
+      ON evaluations (project_id, created_at DESC)
+  `;
+
   await sql`
     CREATE TABLE IF NOT EXISTS pipeline_stages (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
