@@ -5,6 +5,7 @@ import type { Project, Artifact } from "../types/project";
 import api from "../api/axios";
 import { CheckIcon, ArrowRight, ChevronDown, ArrowLeft } from "../components/Icons";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { UIRefinementPanel } from "../components/UIRefinementPanel";
 import { useToast } from "../context/ToastContext";
 
 // ─── Tab configuration ──────────────────────────────────────────────────────
@@ -676,14 +677,30 @@ function previewDoc(html: string): string {
   return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, guard + "</body>") : html + guard;
 }
 
-function UICodeView({ data }: { data: any }) {
-  const screens: any[] = data.screens ?? [];
-  const [selected, setSelected] = useState(screens[0]?.id ?? null);
+function UICodeView({ data, pending, projectId, onRefreshed }: {
+  data: any;
+  pending?: any;
+  projectId: string;
+  onRefreshed: () => void | Promise<void>;
+}) {
+  // When a refinement is staged, preview the pending UI; otherwise the committed UI.
+  const active = pending ?? data;
+  const screens: any[] = active.screens ?? [];
+  const [selected, setSelected] = useState<string | null>(screens[0]?.id ?? null);
   const [tab, setTab] = useState<"preview" | "code">("preview");
   const [viewport, setViewport] = useState<Viewport>("desktop");
   const [copied, setCopied] = useState(false);
 
-  const screen = screens.find((s) => s.id === selected);
+  // When a preview appears, jump to the first changed screen so the edit is visible.
+  const changedIds: string[] = pending?.__refinement?.screensChanged ?? [];
+  useEffect(() => {
+    if (changedIds.length && !changedIds.includes(selected ?? "")) {
+      setSelected(changedIds[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending]);
+
+  const screen = screens.find((s) => s.id === selected) ?? screens[0];
 
   function copyCode() {
     if (!screen?.html) return;
@@ -721,6 +738,24 @@ function UICodeView({ data }: { data: any }) {
 
   return (
     <div className="space-y-4">
+      {/* AI refinement controls */}
+      <UIRefinementPanel
+        projectId={projectId}
+        screens={(data.screens ?? []).map((s: any) => ({ id: s.id, name: s.name, route: s.route }))}
+        currentScreenId={selected}
+        currentScreenName={screen?.name}
+        pending={pending}
+        onRefreshed={onRefreshed}
+      />
+
+      {/* Preview banner while changes are staged */}
+      {pending && (
+        <div className="flex items-center gap-2 text-xs text-indigo-300 light:text-indigo-700 bg-indigo-500/10 light:bg-indigo-50 border border-indigo-500/30 light:border-indigo-200 rounded-lg px-3 py-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse flex-shrink-0" />
+          Previewing proposed changes — not yet saved. Apply or discard above.
+        </div>
+      )}
+
       {/* Screen selector */}
       <div className="flex flex-wrap gap-2">
         {screens.map((s) => (
@@ -1228,11 +1263,13 @@ function ArtifactSummary({ tabKey, content, artifactMap }: { tabKey: TabKey; con
 
 // ─── Content dispatcher ──────────────────────────────────────────────────────
 
-function ArtifactContent({ tabKey, content, artifactMap, projectName }: {
+function ArtifactContent({ tabKey, content, artifactMap, projectName, projectId, onRefreshed }: {
   tabKey: TabKey;
   content: any;
   artifactMap: Record<string, any>;
   projectName?: string;
+  projectId: string;
+  onRefreshed: () => void | Promise<void>;
 }) {
   if (tabKey === "srs_document") {
     return (
@@ -1255,7 +1292,7 @@ function ArtifactContent({ tabKey, content, artifactMap, projectName }: {
           case "functional_test_cases":     return <FTCView data={content} />;
           case "security_test_cases":       return <STCView data={content} />;
           case "wireframes":                return <WireframesView data={content} />;
-          case "ui_code":                  return <UICodeView data={content} />;
+          case "ui_code":                  return <UICodeView data={content} pending={artifactMap["ui_code_pending"]} projectId={projectId} onRefreshed={onRefreshed} />;
           case "uml_diagrams":             return <DiagramsView data={content} />;
           case "traceability_matrix":       return <TraceabilityView data={content} />;
           default:                          return <pre className="text-xs text-slate-400 overflow-auto">{JSON.stringify(content, null, 2)}</pre>;
@@ -1278,6 +1315,10 @@ export default function ArtifactsViewer() {
   const [generatingUI, setGeneratingUI] = useState(false);
   const [uiGenStage, setUiGenStage] = useState<string>("");
   const toast = useToast();
+
+  async function refreshArtifacts() {
+    if (id) setArtifacts(await fetchArtifacts(id));
+  }
 
   async function handleExport(format: "pdf" | "docx" | "csv" | "latex") {
     if (!id || exporting) return;
@@ -1396,7 +1437,11 @@ export default function ArtifactsViewer() {
   }, [artifacts]);
 
   const artifactMap = Object.fromEntries(artifacts.map((a) => [a.type, a.content]));
-  const availableKeys = new Set(artifacts.map((a) => a.type));
+  // `ui_code_pending` is a transient refinement preview, not a deliverable —
+  // keep it in artifactMap (so UICodeView can render it) but exclude it from the
+  // tab list and the "N / 10" count.
+  const realArtifacts = artifacts.filter((a) => a.type !== "ui_code_pending");
+  const availableKeys = new Set(realArtifacts.map((a) => a.type));
   const srsReady = ["extraction","functional_requirements","non_functional_requirements","security_requirements"]
     .every(k => availableKeys.has(k));
 
@@ -1427,13 +1472,13 @@ export default function ArtifactsViewer() {
           <span className="text-slate-700 light:text-slate-300">/</span>
           <span className="text-slate-300 light:text-slate-700 text-sm font-medium">Artifacts</span>
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-xs text-slate-600 light:text-slate-400 mr-1">{artifacts.length} / 10</span>
+            <span className="text-xs text-slate-600 light:text-slate-400 mr-1">{realArtifacts.length} / 10</span>
             <ThemeToggle />
             {(["pdf", "docx", "csv", "latex"] as const).map((fmt) => (
               <button
                 key={fmt}
                 onClick={() => handleExport(fmt)}
-                disabled={!!exporting || artifacts.length === 0}
+                disabled={!!exporting || realArtifacts.length === 0}
                 className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-700 light:border-slate-300 hover:border-indigo-500 light:hover:border-indigo-400 text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900 transition disabled:opacity-40 disabled:cursor-not-allowed uppercase"
               >
                 {exporting === fmt ? "…" : fmt}
@@ -1532,6 +1577,8 @@ export default function ArtifactsViewer() {
             content={artifactMap[activeTab]}
             artifactMap={artifactMap}
             projectName={project?.name}
+            projectId={id ?? ""}
+            onRefreshed={refreshArtifacts}
           />
         )}
       </div>

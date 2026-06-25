@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { createProject } from "../api/projects";
-import type { ProjectMetadata } from "../types/project";
+import { createProject, errorMessage } from "../api/projects";
+import type { ProjectMetadata, UIPreferences } from "../types/project";
 import { useToast } from "../context/ToastContext";
 import { ArrowLeft, ChevronDown } from "../components/Icons";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { UIPreferencesForm, UIPreferencesSummary } from "../components/UIPreferencesForm";
+import { cleanPreferences, summarizePreferences } from "../config/uiPreferences";
 
 const EXAMPLE_PROMPTS = [
   "A mobile app for university students to track attendance and grades with professor notifications.",
@@ -29,6 +31,12 @@ export default function CreateProject() {
   const setMetaField = (key: keyof ProjectMetadata) => (value: string) =>
     setMeta((m) => ({ ...m, [key]: value }));
 
+  // Optional UI design preferences — folded away; included in the payload only
+  // for fields the user actually picks. Empty → AI chooses the design.
+  const [showPrefs, setShowPrefs] = useState(false);
+  const [prefs, setPrefs] = useState<UIPreferences>({});
+  const prefSummary = summarizePreferences(prefs);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
@@ -38,15 +46,17 @@ export default function CreateProject() {
       const metadata = Object.fromEntries(
         Object.entries(meta).filter(([, v]) => v && v.trim())
       ) as ProjectMetadata;
+      const ui_preferences = cleanPreferences(prefs);
       const project = await createProject({
         name,
         description,
         ...(Object.keys(metadata).length ? { metadata } : {}),
+        ...(Object.keys(ui_preferences).length ? { ui_preferences } : {}),
       });
       toast.success("Project created! Run the pipeline to generate artifacts.");
       navigate(`/projects/${project.id}`);
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? "Failed to create project.");
+      setError(errorMessage(err, "Failed to create project."));
     } finally {
       setLoading(false);
     }
@@ -132,22 +142,6 @@ export default function CreateProject() {
             />
           </div>
 
-          <div>
-            <p className="text-xs text-slate-600 light:text-slate-400 mb-2 uppercase tracking-wider font-medium">Try an example</p>
-            <div className="space-y-2">
-              {EXAMPLE_PROMPTS.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => setDescription(prompt)}
-                  className="w-full text-left text-xs bg-slate-900 light:bg-slate-50 border border-slate-800 light:border-slate-200 hover:border-indigo-500/40 light:hover:border-indigo-300 rounded-xl px-4 py-3 text-slate-400 light:text-slate-500 hover:text-slate-200 light:hover:text-slate-700 transition leading-relaxed"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Optional organization & document details */}
           <div className="border border-slate-800 light:border-slate-200 rounded-xl overflow-hidden">
             <button
@@ -185,6 +179,52 @@ export default function CreateProject() {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Optional UI design preferences */}
+          <div className="border border-slate-800 light:border-slate-200 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowPrefs((s) => !s)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left bg-slate-900/60 light:bg-slate-50 hover:bg-slate-900 light:hover:bg-slate-100 transition"
+            >
+              <span className="text-sm font-medium text-slate-300 light:text-slate-700">
+                UI Design Preferences
+                <span className="text-slate-600 light:text-slate-400 font-normal"> · optional</span>
+              </span>
+              <ChevronDown
+                size={16}
+                className={`text-slate-500 transition-transform ${showPrefs ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {showPrefs && (
+              <div className="p-4 border-t border-slate-800 light:border-slate-200 space-y-5">
+                <p className="text-xs text-slate-500 light:text-slate-400 leading-relaxed">
+                  Customize how the generated interface should look and feel. Leave empty for AI-generated design decisions.
+                </p>
+                <UIPreferencesForm value={prefs} onChange={setPrefs} />
+              </div>
+            )}
+          </div>
+
+          {/* Pre-generation summary of the chosen preferences */}
+          {prefSummary.length > 0 && <UIPreferencesSummary lines={prefSummary} />}
+
+          <div>
+            <p className="text-xs text-slate-600 light:text-slate-400 mb-2 uppercase tracking-wider font-medium">Try an example</p>
+            <div className="space-y-2">
+              {EXAMPLE_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => setDescription(prompt)}
+                  className="w-full text-left text-xs bg-slate-900 light:bg-slate-50 border border-slate-800 light:border-slate-200 hover:border-indigo-500/40 light:hover:border-indigo-300 rounded-xl px-4 py-3 text-slate-400 light:text-slate-500 hover:text-slate-200 light:hover:text-slate-700 transition leading-relaxed"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
           </div>
 
           <button

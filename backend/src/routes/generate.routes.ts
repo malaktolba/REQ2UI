@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 import { sql } from "../db/client";
 import { requireAuth } from "../middleware/auth.middleware";
 import { runPipeline, regenerateUICode } from "../services/pipeline.service";
+import { refineUI, RefinementScope } from "../services/refinement.service";
 
 const router = Router();
 
@@ -20,7 +21,7 @@ router.get("/:id/generate", requireAuth, genLimiter, async (req: Request, res: R
   const { id } = req.params;
 
   const rows = await sql`
-    SELECT id, name, description, status, metadata FROM projects
+    SELECT id, name, description, status, metadata, ui_preferences FROM projects
     WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL
   ` as any[];
 
@@ -68,7 +69,11 @@ router.get("/:id/generate", requireAuth, genLimiter, async (req: Request, res: R
       // A completed project means the user explicitly clicked "Re-generate" —
       // redo every stage. Any other status (pending/failed/interrupted) resumes,
       // skipping stages whose artifacts already exist.
-      { force: project.status === "completed", metadata: project.metadata ?? undefined }
+      {
+        force: project.status === "completed",
+        metadata: project.metadata ?? undefined,
+        uiPreferences: project.ui_preferences ?? undefined,
+      }
     );
     send("done", { message: "Pipeline complete" });
   } catch (err: any) {
@@ -95,6 +100,40 @@ router.get("/:id/generate/ui-code", requireAuth, genLimiter, async (req: Request
     send("done", { message: "UI code generation complete" });
   } catch (err: any) {
     send("error", { error: err?.message ?? "Generation failed" });
+  } finally {
+    res.end();
+  }
+});
+
+// GET /api/projects/:id/refine  (SSE — targeted AI UI refinement, stages a preview)
+// prompt/scope/screens arrive as query params because EventSource can only GET.
+router.get("/:id/refine", requireAuth, genLimiter, async (req: Request, res: Response): Promise<void> => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (event: string, data: object) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const prompt = String(req.query.prompt ?? "");
+  const scope = String(req.query.scope ?? "page") as RefinementScope;
+  const screensParam = String(req.query.screens ?? "");
+  const screenIds = screensParam ? screensParam.split(",").filter(Boolean) : [];
+
+  try {
+    const result = await refineUI(
+      req.params.id as string,
+      req.user!.sub,
+      { prompt, scope, screenIds },
+      (ev) => send("stage", ev)
+    );
+    send("result", result);
+    send("done", { message: "Refinement ready to preview" });
+  } catch (err: any) {
+    send("error", { error: err?.message ?? "Refinement failed" });
   } finally {
     res.end();
   }

@@ -36,6 +36,7 @@ async function migrate() {
       description TEXT NOT NULL,
       status      TEXT NOT NULL DEFAULT 'pending',
       metadata    JSONB NOT NULL DEFAULT '{}'::jsonb,
+      ui_preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
       deleted_at  TIMESTAMPTZ,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -45,6 +46,12 @@ async function migrate() {
   // Backfill for databases created before `metadata` existed (idempotent).
   await sql`
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+  `;
+
+  // Optional UI design preferences captured before generation (idempotent).
+  // Existing projects default to '{}' → AI picks the design (backward compatible).
+  await sql`
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS ui_preferences JSONB NOT NULL DEFAULT '{}'::jsonb
   `;
 
   await sql`
@@ -67,6 +74,22 @@ async function migrate() {
       format      TEXT NOT NULL,
       file_path   TEXT,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  // Version history for the AI UI-refinement feature. Each row is a snapshot of
+  // a committed `ui_code` artifact state, captured before a refinement/restore
+  // replaces it — letting users undo/restore previous UI states.
+  await sql`
+    CREATE TABLE IF NOT EXISTS ui_revisions (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id  UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      version     INT  NOT NULL,
+      content     JSONB NOT NULL,
+      label       TEXT NOT NULL,
+      scope       TEXT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(project_id, version)
     )
   `;
 

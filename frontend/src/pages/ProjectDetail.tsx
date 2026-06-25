@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { fetchProject, fetchProjectWithStages, updateProject } from "../api/projects";
-import type { Project, PipelineStage, ProjectMetadata } from "../types/project";
+import { fetchProject, fetchProjectWithStages, updateProject, errorMessage } from "../api/projects";
+import type { Project, PipelineStage, ProjectMetadata, UIPreferences } from "../types/project";
 import { StatusBadge } from "../components/StatusBadge";
 import { useToast } from "../context/ToastContext";
 import { CheckIcon, XIcon, SpinnerIcon, CircleIcon, ArrowLeft, ArrowRight } from "../components/Icons";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { UIPreferencesForm, UIPreferencesSummary } from "../components/UIPreferencesForm";
+import { cleanPreferences, summarizePreferences } from "../config/uiPreferences";
 
 const STAGE_NAMES = [
   "Requirement Extraction",
@@ -80,6 +82,7 @@ export default function ProjectDetail() {
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editMeta, setEditMeta] = useState<ProjectMetadata>({});
+  const [editPrefs, setEditPrefs] = useState<UIPreferences>({});
   const [saving, setSaving] = useState(false);
 
   const META_FIELDS: { key: keyof ProjectMetadata; label: string; placeholder: string; full?: boolean }[] = [
@@ -176,6 +179,7 @@ export default function ProjectDetail() {
     setEditName(project.name);
     setEditDesc(project.description);
     setEditMeta(project.metadata ?? {});
+    setEditPrefs(project.ui_preferences ?? {});
     setEditing(true);
   }
 
@@ -192,12 +196,13 @@ export default function ProjectDetail() {
         name: editName.trim(),
         description: editDesc.trim(),
         metadata,
+        ui_preferences: cleanPreferences(editPrefs),
       });
       setProject(updated);
       setEditing(false);
       toast.success("Project updated.");
-    } catch {
-      toast.error("Failed to save changes.");
+    } catch (err: any) {
+      toast.error(errorMessage(err, "Failed to save changes."));
     } finally {
       setSaving(false);
     }
@@ -284,6 +289,15 @@ export default function ProjectDetail() {
                 </div>
               </div>
 
+              {/* UI design preferences (optional) */}
+              <div className="rounded-xl border border-slate-800 light:border-slate-200 p-4">
+                <p className="text-xs font-medium text-slate-400 light:text-slate-600 mb-3">
+                  UI Design Preferences
+                  <span className="text-slate-600 light:text-slate-400 font-normal"> · optional, guides UI code generation</span>
+                </p>
+                <UIPreferencesForm value={editPrefs} onChange={setEditPrefs} />
+              </div>
+
               <div className="flex gap-2">
                 <button
                   onClick={handleSaveEdit}
@@ -340,6 +354,18 @@ export default function ProjectDetail() {
                     ))}
                 </div>
               )}
+              {summarizePreferences(project.ui_preferences).length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {summarizePreferences(project.ui_preferences).map((l) => (
+                    <span
+                      key={l}
+                      className="inline-flex items-center gap-1 text-xs bg-indigo-500/10 light:bg-indigo-50 border border-indigo-500/20 light:border-indigo-200 rounded-full px-2.5 py-1 text-indigo-300 light:text-indigo-700"
+                    >
+                      {l}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -347,6 +373,11 @@ export default function ProjectDetail() {
             <div className="bg-red-500/10 light:bg-red-50 border border-red-500/30 light:border-red-200 text-red-400 light:text-red-600 text-sm px-4 py-3 rounded-xl">
               {genError}
             </div>
+          )}
+
+          {/* Pre-generation summary of UI design preferences (editable above). */}
+          {!editing && project.status !== "completed" && (
+            <UIPreferencesSummary lines={summarizePreferences(project.ui_preferences)} />
           )}
 
           <div className="flex gap-3 flex-wrap">

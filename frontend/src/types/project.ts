@@ -10,11 +10,26 @@ export interface ProjectMetadata {
   version?: string;
 }
 
+/** Optional UI design preferences that constrain Stage 10 UI generation. */
+export interface UIPreferences {
+  theme?: string;
+  color_mode?: string;
+  primary_color?: string;
+  layout_density?: string;
+  navigation?: string;
+  content_style?: string;
+  button_style?: string;
+  card_style?: string;
+  animations?: string;
+  custom_instructions?: string;
+}
+
 export interface Project {
   id: string;
   name: string;
   description: string;
   metadata?: ProjectMetadata;
+  ui_preferences?: UIPreferences;
   status: ProjectStatus;
   artifact_count: number;
   created_at: string;
@@ -38,4 +53,15 @@ export interface Artifact {
   content: any;
   version: number;
   updated_at: string;
+}
+
+/** Target of an AI UI-refinement request. */
+export type RefinementScope = "page" | "pages" | "design_system";
+
+/** A snapshot in the UI-code version history. */
+export interface UIRevision {
+  version: number;
+  label: string;
+  scope: string | null;
+  created_at: string;
 }

@@ -1,6 +1,7 @@
 import { sql } from "../db/client";
 import { callGroq, GROQ_HEAVY, GROQ_LIGHT } from "./groq.service";
 import { callGeminiJSON, callGeminiText } from "./gemini.service";
+import { UIPreferences, uiPreferencesPromptBlock } from "../config/uiPreferences";
 
 export interface StageEvent {
   stage: number;
@@ -251,7 +252,8 @@ async function generateUICodeMultipass(
   s2: any,
   s7: any,
   emit: Emit,
-  cached?: any
+  cached?: any,
+  uiPreferences?: UIPreferences
 ): Promise<void> {
   const stageName = STAGE_NAMES[9];
 
@@ -261,6 +263,10 @@ async function generateUICodeMultipass(
     emit({ stage: 10, name: stageName, status: "completed" });
     return;
   }
+
+  // Optional, user-supplied design constraints. Empty when the user opted out,
+  // in which case the prompts keep their existing default-design behaviour.
+  const prefsBlock = uiPreferencesPromptBlock(uiPreferences);
 
   const screens = selectDistinctScreens(s7.screens ?? [], 6);
   const total = screens.length;
@@ -289,7 +295,7 @@ Design rules:
 - Navbar: fixed top, logo left, navigation links center/right, user avatar right
 - Navigation links must include ALL these screens: ${routeMap}
 - Footer: simple 1-line with project name and copyright
-- Use real, project-appropriate link text (not placeholders)`,
+- Use real, project-appropriate link text (not placeholders)${prefsBlock}`,
       `Project: ${projectName}\nSystem: ${s1.system_summary}`,
       8000
     );
@@ -344,7 +350,7 @@ CODING RULES:
 7. Tables: use realistic sample rows (3–5 rows minimum)
 8. Mobile-responsive: use Tailwind responsive prefixes (sm:, md:, lg:)
 9. Hover/focus states on interactive elements
-10. Include at least one piece of JavaScript for a small interaction (e.g., dropdown, modal toggle, tab switch)`,
+10. Include at least one piece of JavaScript for a small interaction (e.g., dropdown, modal toggle, tab switch)${prefsBlock}`,
             `Screen: ${sc.name}
 Route: ${sc.route ?? ""}
 Description: ${sc.description ?? ""}
@@ -404,7 +410,7 @@ System: ${s1.system_summary}`
 /** Re-runs only Stage 10 for a project that already has the prerequisite artifacts. */
 export async function regenerateUICode(projectId: string, userId: string, emit: Emit): Promise<void> {
   const projectRows = await sql`
-    SELECT name FROM projects WHERE id = ${projectId} AND user_id = ${userId} AND deleted_at IS NULL
+    SELECT name, ui_preferences FROM projects WHERE id = ${projectId} AND user_id = ${userId} AND deleted_at IS NULL
   ` as any[];
   if (!projectRows.length) throw new Error("Project not found");
 
@@ -417,7 +423,10 @@ export async function regenerateUICode(projectId: string, userId: string, emit: 
     throw new Error("Prerequisite artifacts missing — run the full pipeline first");
   }
 
-  await generateUICodeMultipass(projectId, projectRows[0].name, data.extraction, data.functional_requirements, data.wireframes, emit);
+  await generateUICodeMultipass(
+    projectId, projectRows[0].name, data.extraction, data.functional_requirements, data.wireframes,
+    emit, undefined, projectRows[0].ui_preferences ?? undefined
+  );
 }
 
 export async function runPipeline(
@@ -425,7 +434,7 @@ export async function runPipeline(
   projectName: string,
   description: string,
   emit: Emit,
-  opts: { force?: boolean; metadata?: ProjectMetadata } = {}
+  opts: { force?: boolean; metadata?: ProjectMetadata; uiPreferences?: UIPreferences } = {}
 ): Promise<void> {
   await sql`UPDATE projects SET status = 'generating', updated_at = NOW() WHERE id = ${projectId}`;
 
@@ -717,7 +726,7 @@ ${s7.screens?.map((sc: any) => `${sc.name}${sc.description ? ` — ${sc.descript
         sanitizeUmlArtifact
       ),
       // Stage 10: UI Code Generation (multipass — needs S1, S2, S7)
-      generateUICodeMultipass(projectId, projectName, s1, s2, s7, emit, cache.ui_code),
+      generateUICodeMultipass(projectId, projectName, s1, s2, s7, emit, cache.ui_code, opts.uiPreferences),
     ]);
 
     await sql`UPDATE projects SET status = 'completed', updated_at = NOW() WHERE id = ${projectId}`;
