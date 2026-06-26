@@ -608,6 +608,9 @@ const DIAGRAM_TYPE_LABELS: Record<string, { label: string; color: string }> = {
   sequence:  { label: "Sequence",    color: "text-teal-400 bg-teal-500/10 border-teal-500/20" },
   er:        { label: "ER",          color: "text-orange-400 bg-orange-500/10 border-orange-500/20" },
   activity:  { label: "Activity",    color: "text-green-400 bg-green-500/10 border-green-500/20" },
+  state:     { label: "State",       color: "text-pink-400 bg-pink-500/10 border-pink-500/20" },
+  component: { label: "Component",   color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" },
+  deployment:{ label: "Deployment",  color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
 };
 
 function DiagramsView({ data }: { data: any }) {
@@ -1391,22 +1394,29 @@ export default function ArtifactsViewer() {
       let res: any;
       if (format === "pdf") {
         res = await api.post(`/projects/${id}/export/pdf`, { diagramSvgs: diagramSvgsForExport }, { responseType: "blob" });
+      } else if (format === "latex") {
+        // LaTeX exports as an Overleaf-ready .zip (main.tex + rendered figures).
+        res = await api.post(`/projects/${id}/export/latex-zip`, { diagramSvgs: diagramSvgsForExport }, { responseType: "blob" });
       } else {
         res = await api.get(`/projects/${id}/export/${format}`, { responseType: "blob" });
       }
       const mime =
         format === "pdf"   ? "application/pdf" :
         format === "docx"  ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" :
-        format === "latex" ? "application/x-latex" :
+        format === "latex" ? "application/zip" :
         "text/csv";
-      const ext = format === "latex" ? "tex" : format;
+      const ext =
+        format === "latex" ? "zip" :
+        format === "pdf"   ? "pdf" :
+        format;
+      const suffix = format === "latex" ? "_latex" : "";
       const url = URL.createObjectURL(new Blob([res.data], { type: mime }));
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${project?.name ?? "project"}_req2ui.${ext}`;
+      a.download = `${project?.name ?? "project"}_req2ui${suffix}.${ext}`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success(`${format === "latex" ? "LaTeX" : format.toUpperCase()} downloaded.`);
+      toast.success(`${format === "latex" ? "LaTeX bundle" : format.toUpperCase()} downloaded.`);
     } catch {
       toast.error(`Failed to export ${format.toUpperCase()}.`);
     } finally {
@@ -1539,6 +1549,7 @@ export default function ArtifactsViewer() {
                 key={fmt}
                 onClick={() => handleExport(fmt)}
                 disabled={!!exporting || realArtifacts.length === 0}
+                title={fmt === "latex" ? "Download an Overleaf-ready .zip (main.tex + rendered UML figures)" : `Export as ${fmt.toUpperCase()}`}
                 className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-700 light:border-slate-300 hover:border-indigo-500 light:hover:border-indigo-400 text-slate-400 light:text-slate-600 hover:text-white light:hover:text-slate-900 transition disabled:opacity-40 disabled:cursor-not-allowed uppercase"
               >
                 {exporting === fmt ? "…" : fmt}

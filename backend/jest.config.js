@@ -7,6 +7,5 @@ module.exports = {
   setupFiles: ["<rootDir>/src/__tests__/setup.ts"],
   moduleNameMapper: {
     "@resvg/resvg-js": "<rootDir>/src/__tests__/mocks/resvg.ts",
-    "pdfkit": "<rootDir>/src/__tests__/mocks/pdfkit.ts",
   },
 };

@@ -224,7 +224,7 @@ export function evaluateTraceability(content: any, fr: any): MetricResult[] {
 export function evaluateUml(content: any): MetricResult[] {
   const diagrams = arr(content?.diagrams);
   return [
-    floor("UML-count", "completeness", "UML diagrams generated", diagrams.length, 3),
+    floor("UML-count", "completeness", "UML diagrams generated", diagrams.length, 5),
     ratio("UML-mermaid", "validity", "Diagram contains valid Mermaid header", diagrams,
       (d) => typeof d.mermaid === "string" && MERMAID_HEADER.test(d.mermaid.trim())),
   ];

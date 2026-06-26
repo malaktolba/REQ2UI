@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { sql } from "../db/client";
 import { requireAuth } from "../middleware/auth.middleware";
-import { generatePDF, generateDOCX, generateCSV, generateLaTeX } from "../services/export.service";
+import { compileLaTeX, generateDOCX, generateCSV, generateLaTeX, generateLaTeXZip } from "../services/export.service";
 
 const router = Router();
 
@@ -42,7 +42,14 @@ router.post("/:id/export/pdf", requireAuth, async (req: Request, res: Response):
   if (!artifacts) { res.status(404).json({ error: "Project not found" }); return; }
 
   const name = projectRows[0]?.name ?? "Project";
-  const buf = await generatePDF(name, artifacts, diagramSvgs, effectiveMeta(projectRows[0], req.user!));
+  let buf: Buffer;
+  try {
+    buf = await compileLaTeX(name, artifacts, effectiveMeta(projectRows[0], req.user!), diagramSvgs);
+  } catch (err) {
+    console.error("[export/pdf]", err);
+    res.status(502).json({ error: "PDF generation failed. The LaTeX document could not be compiled." });
+    return;
+  }
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${name.replace(/[^a-z0-9]/gi, "_")}_req2ui.pdf"`);
@@ -62,7 +69,14 @@ router.get("/:id/export/pdf", requireAuth, async (req: Request, res: Response): 
   if (!artifacts) { res.status(404).json({ error: "Project not found" }); return; }
 
   const name = projectRows[0]?.name ?? "Project";
-  const buf = await generatePDF(name, artifacts, undefined, effectiveMeta(projectRows[0], req.user!));
+  let buf: Buffer;
+  try {
+    buf = await compileLaTeX(name, artifacts, effectiveMeta(projectRows[0], req.user!));
+  } catch (err) {
+    console.error("[export/pdf]", err);
+    res.status(502).json({ error: "PDF generation failed. The LaTeX document could not be compiled." });
+    return;
+  }
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${name.replace(/[^a-z0-9]/gi, "_")}_req2ui.pdf"`);
@@ -107,6 +121,35 @@ router.get("/:id/export/latex", requireAuth, async (req: Request, res: Response)
   res.setHeader("Content-Type", "application/x-latex");
   res.setHeader("Content-Disposition", `attachment; filename="${name.replace(/[^a-z0-9]/gi, "_")}_req2ui.tex"`);
   res.send(tex);
+});
+
+// POST /api/projects/:id/export/latex-zip  (accepts { diagramSvgs? } in body)
+// Returns an Overleaf-ready .zip: main.tex + figures/ with the rendered UML PNGs.
+router.post("/:id/export/latex-zip", requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const userId = req.user!.sub;
+  const diagramSvgs: Record<string, string> | undefined = req.body?.diagramSvgs;
+
+  const [projectRows, artifacts] = await Promise.all([
+    sql`SELECT name, metadata FROM projects WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL` as any,
+    getArtifacts(id, userId),
+  ]);
+
+  if (!artifacts) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const name = projectRows[0]?.name ?? "Project";
+  let buf: Buffer;
+  try {
+    buf = await generateLaTeXZip(name, artifacts, effectiveMeta(projectRows[0], req.user!), diagramSvgs);
+  } catch (err) {
+    console.error("[export/latex-zip]", err);
+    res.status(500).json({ error: "Failed to build the LaTeX bundle." });
+    return;
+  }
+
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${name.replace(/[^a-z0-9]/gi, "_")}_req2ui_latex.zip"`);
+  res.send(buf);
 });
 
 // GET /api/projects/:id/export/csv

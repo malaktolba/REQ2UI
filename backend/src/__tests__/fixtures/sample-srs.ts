@@ -138,6 +138,12 @@ const umlDiagrams = {
       mermaid: "classDiagram\n  class User {\n    +id String\n    +login()\n  }\n  User --> Course : enrols" },
     { id: "UML-003", title: "Main Sequence Diagram", type: "sequence", description: "Login flow",
       mermaid: "sequenceDiagram\n  actor User\n  participant System\n  User->>System: login\n  System-->>User: token" },
+    { id: "UML-004", title: "Entity Relationship Diagram", type: "er", description: "Data model",
+      mermaid: "erDiagram\n  USER ||--o{ ENROLMENT : has\n  COURSE ||--o{ ENROLMENT : has\n  USER {\n    int id PK\n    string email\n  }" },
+    { id: "UML-005", title: "Submission Lifecycle", type: "state", description: "Assignment states",
+      mermaid: "stateDiagram-v2\n  [*] --> Draft\n  Draft --> Submitted: submit\n  Submitted --> Graded: grade\n  Graded --> [*]" },
+    { id: "UML-006", title: "System Component Diagram", type: "component", description: "Architecture",
+      mermaid: "flowchart LR\n  subgraph Client\n    UI[Web App]\n  end\n  subgraph Server\n    API[API Service]\n    DB[(Database)]\n  end\n  UI --> API\n  API --> DB" },
   ],
 };
 

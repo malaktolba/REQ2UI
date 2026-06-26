@@ -56,7 +56,7 @@ VITE_API_BASE_URL=    # leave empty for local dev; Vite proxy handles /api
 - **Backend**: Node.js, Express 4, TypeScript
 - **Database**: PostgreSQL via `@neondatabase/serverless` (Neon)
 - **AI**: Groq SDK (`llama-3.3-70b-versatile`) for stages 1–9; Google Gemini 2.5 Flash-Lite for stage 10 (UI code)
-- **Export**: pdfkit, docx.js, csv-writer, resvg-js (SVG→PNG)
+- **Export**: LaTeX → PDF via Tectonic (compiled server-side), docx.js, csv-writer, resvg-js (SVG→PNG)
 - **Deployment**: Vercel (frontend) + Render (backend)
 
 ### The AI Pipeline (core feature)
@@ -73,7 +73,7 @@ VITE_API_BASE_URL=    # leave empty for local dev; Vite proxy handles /api
 | 6 | Security test cases | Groq |
 | 7 | UI wireframe descriptions | Groq |
 | 8 | Traceability matrix | Groq |
-| 9 | UML diagrams (Mermaid syntax) | Groq |
+| 9 | UML diagrams — 6–8 across multiple types (use case, class, ER, sequence, activity, state, component) as Mermaid | Groq |
 | 10 | UI HTML code (multipass: design system + per-screen) | Gemini |
 
 Pipeline is streamed to the frontend via **SSE** at `GET /api/projects/:id/generate?token=<jwt>`. Each stage upserts to the `artifacts` table (JSONB `content`). Stage progress is tracked in `pipeline_stages`.
@@ -117,10 +117,14 @@ JWT-based with silent refresh:
 - `src/components/` — Shared UI primitives
 
 ### Export System
-`backend/src/services/export.service.ts` — `ieeeSections()` converts artifacts into IEEE 830 structure. PDF uses resvg-js to rasterize Mermaid SVGs to PNG for embedding. DOCX uses docx.js; CSV exports the traceability matrix.
+`backend/src/services/export.service.ts`:
+- **PDF**: `generateLaTeX()` renders a thesis-styled IEEE 830 `report` (title page, front matter, colour-headed `xltabular` requirement tables, UML chapter, UI appendix). `compileLaTeX()` writes it to a temp dir and shells out to **Tectonic** (single self-contained TeX binary; resolves the TOC in one pass) to produce the PDF. UML Mermaid SVGs captured client-side are rasterised to PNG via resvg-js and embedded as figures (falling back to Mermaid source if an image is missing). `TECTONIC_PATH` overrides the binary location.
+- **DOCX**: `ieeeSections()` → docx.js. **CSV**: the traceability matrix.
+- **LaTeX bundle**: `generateLaTeXZip()` (via `JSZip`) builds an **Overleaf-ready `.zip`** containing `main.tex`, the rendered UML diagrams as PNG figures under `figures/`, and a `README.txt`. The same client-captured Mermaid SVGs are rasterised to PNG here; the `.tex` references `figures/diagram_N.png`. Served at `POST /export/latex-zip` (accepts `{ diagramSvgs }`); the frontend's **LaTeX** export button uses it. The raw `.tex` source is still downloadable directly (`GET /export/latex`).
+- Tectonic is provided by the backend Docker image (`backend/Dockerfile`); it is **not** available in plain `npm`-only environments, so a local non-Docker dev server cannot produce PDFs unless `tectonic` is on `PATH`.
 
 ## Deployment
 
 - **Frontend**: Vercel; `vercel.json` has the SPA fallback (`/(.*) → /index.html`). Build uses `CI=false npm run build`.
-- **Backend**: Render; `render.yaml` configures the Node.js web service. Requires all env vars set in Render dashboard.
+- **Backend**: Render; `render.yaml` configures a **Docker** web service built from `backend/Dockerfile` (Node 20 + Tectonic). Requires all env vars set in Render dashboard.
 - **Live**: frontend at `req-2-ui.vercel.app`, backend at `req-2-ui-backend.onrender.com`.

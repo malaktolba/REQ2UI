@@ -1,4 +1,5 @@
-import { generateLaTeX, generateCSV } from "../services/export.service";
+import JSZip from "jszip";
+import { generateLaTeX, generateCSV, generateDOCX, generateLaTeXZip } from "../services/export.service";
 
 const SAMPLE_ARTIFACTS = [
   {
@@ -139,6 +140,86 @@ describe("generateLaTeX", () => {
   it("includes actors as intended users", () => {
     expect(latex).toContain("Student");
     expect(latex).toContain("Teacher");
+  });
+});
+
+describe("generateLaTeX — UML diagrams", () => {
+  const withDiagrams = [
+    ...SAMPLE_ARTIFACTS,
+    {
+      type: "uml_diagrams",
+      content: {
+        diagrams: [
+          { id: "use-case", title: "Use Case Diagram", description: "Top-level actors.", mermaid: "graph TD; A-->B" },
+        ],
+      },
+    },
+  ];
+
+  it("falls back to Mermaid source when no rendered image is supplied", () => {
+    const latex = generateLaTeX("E-Learning Platform", withDiagrams);
+    expect(latex).toContain("\\begin{verbatim}");
+    expect(latex).toContain("graph TD; A-->B");
+    expect(latex).not.toContain("\\includegraphics");
+  });
+
+  it("embeds the rendered PNG as a figure when an image is mapped to the diagram id", () => {
+    const latex = generateLaTeX("E-Learning Platform", withDiagrams, undefined, { "use-case": "diagram_0.png" });
+    expect(latex).toContain("\\includegraphics[width=\\linewidth,height=0.7\\textheight,keepaspectratio]{diagram_0.png}");
+    expect(latex).toContain("\\caption{Use Case Diagram}");
+    expect(latex).not.toContain("\\begin{verbatim}");
+  });
+});
+
+// ─── LaTeX ZIP bundle tests ─────────────────────────────────────────────────
+
+describe("generateLaTeXZip", () => {
+  it("produces a .zip (PK magic) containing main.tex and a README", async () => {
+    const buf = await generateLaTeXZip("E-Learning Platform", SAMPLE_ARTIFACTS);
+    expect(Buffer.isBuffer(buf)).toBe(true);
+    // ZIP archives start with the "PK" local-file-header magic.
+    expect(buf.slice(0, 2).toString("ascii")).toBe("PK");
+
+    const zip = await JSZip.loadAsync(buf);
+    expect(zip.file("main.tex")).not.toBeNull();
+    expect(zip.file("README.txt")).not.toBeNull();
+    const tex = await zip.file("main.tex")!.async("string");
+    expect(tex).toContain("\\documentclass[11pt,a4paper]{report}");
+    expect(tex).toContain("E-Learning Platform");
+  });
+
+  it("rasterises supplied diagram SVGs into figures/ and references them in main.tex", async () => {
+    const withDiagrams = [
+      ...SAMPLE_ARTIFACTS,
+      { type: "uml_diagrams", content: { diagrams: [{ id: "uc", title: "Use Case", type: "use_case", mermaid: "graph TD; A-->B" }] } },
+    ];
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="60"><rect width="100" height="60" fill="#fff"/></svg>`;
+    const buf = await generateLaTeXZip("E-Learning Platform", withDiagrams, undefined, { uc: svg });
+
+    const zip = await JSZip.loadAsync(buf);
+    expect(zip.file("figures/diagram_0.png")).not.toBeNull();
+    const tex = await zip.file("main.tex")!.async("string");
+    expect(tex).toContain("\\includegraphics");
+    expect(tex).toContain("figures/diagram_0.png");
+    expect(tex).not.toContain("\\begin{verbatim}");
+  });
+});
+
+// ─── DOCX tests ───────────────────────────────────────────────────────────────
+
+describe("generateDOCX", () => {
+  it("produces a non-empty .docx (zip) buffer from full artifacts without throwing", async () => {
+    const buf = await generateDOCX("E-Learning Platform", SAMPLE_ARTIFACTS);
+    expect(Buffer.isBuffer(buf)).toBe(true);
+    expect(buf.length).toBeGreaterThan(1000);
+    // .docx is an OOXML zip; the magic bytes are "PK".
+    expect(buf.slice(0, 2).toString("ascii")).toBe("PK");
+  });
+
+  it("handles an empty artifact set gracefully", async () => {
+    const buf = await generateDOCX("Empty", []);
+    expect(buf.length).toBeGreaterThan(0);
+    expect(buf.slice(0, 2).toString("ascii")).toBe("PK");
   });
 });
 

@@ -1,12 +1,11 @@
 services:
   - type: web
     name: req2ui-backend
-    env: node
+    runtime: docker
     region: oregon
     plan: free
     rootDir: backend
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: NODE_ENV
         value: production

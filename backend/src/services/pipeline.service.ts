@@ -69,7 +69,7 @@ const STAGE_MAX_TOKENS = [
   4000, // 6  Security Test Cases
   6000, // 7  UI Wireframe Descriptions
   4000, // 8  Traceability Matrix
-  4000, // 9  UML Diagrams
+  9000, // 9  UML Diagrams (now 6–8 diagrams across multiple UML types)
 ];
 
 // Preferred model per stage (indexed by stage number - 1). Easier, highly
@@ -925,9 +925,18 @@ Security requirements available: ${s4.requirements?.map((r: any) => r.id).join("
       stageOrCached<any>(
         cache,
         projectId, 9, "uml_diagrams",
-      `You are a software architect. Generate exactly 3 UML diagrams as valid Mermaid.js code.
+      `You are a software architect. Generate a RICH, comprehensive set of 6–8 UML/architecture diagrams as valid Mermaid.js code that genuinely model THIS specific system — not generic placeholders.
 
-Return a JSON object with this exact shape:
+Choose the diagrams that best fit the system and ensure broad coverage across these categories (include at least one of each of the first five, then add the most relevant remaining ones):
+- "use_case"   — actors and the use cases they perform (flowchart TD)
+- "class"      — domain model: real entities, attributes, methods, and relationships (classDiagram)
+- "er"         — database/entity-relationship model with keys and cardinalities (erDiagram)
+- "sequence"   — a key end-to-end interaction flow (sequenceDiagram). PREFER TWO sequence diagrams for two different important flows.
+- "activity"   — the main business workflow as an activity/flow diagram (flowchart TD with decisions)
+- "state"      — lifecycle of a core entity (stateDiagram-v2)
+- "component"  — high-level component/architecture view (flowchart LR with subgraphs)
+
+Return a JSON object with this exact shape (6–8 entries; ids UML-001, UML-002, …):
 {
   "diagrams": [
     {
@@ -935,37 +944,69 @@ Return a JSON object with this exact shape:
       "title": "System Use Case Diagram",
       "type": "use_case",
       "description": "one-line description",
-      "mermaid": "flowchart TD\\n  ActorName((Actor Label))\\n  UC1[Use Case One]\\n  ActorName --> UC1"
+      "mermaid": "flowchart TD\\n  Actor1((Customer))\\n  UC1[Browse Catalog]\\n  UC2[Place Order]\\n  Actor1 --> UC1\\n  Actor1 --> UC2"
     },
     {
       "id": "UML-002",
       "title": "Domain Class Diagram",
       "type": "class",
       "description": "one-line description",
-      "mermaid": "classDiagram\\n  class EntityName {\\n    +id String\\n    +field String\\n    +method()\\n  }\\n  EntityA --> EntityB : relation"
+      "mermaid": "classDiagram\\n  class Entity {\\n    +id String\\n    +field String\\n    +method()\\n  }\\n  EntityA --> EntityB : relation"
     },
     {
       "id": "UML-003",
-      "title": "Main Sequence Diagram",
+      "title": "Entity Relationship Diagram",
+      "type": "er",
+      "description": "one-line description",
+      "mermaid": "erDiagram\\n  USER ||--o{ ORDER : places\\n  ORDER ||--|{ LINE_ITEM : contains\\n  USER {\\n    int id PK\\n    string email\\n  }"
+    },
+    {
+      "id": "UML-004",
+      "title": "Order Placement Sequence",
       "type": "sequence",
       "description": "one-line description",
       "mermaid": "sequenceDiagram\\n  actor User\\n  participant System\\n  participant DB\\n  User->>System: action\\n  System->>DB: query\\n  DB-->>System: result\\n  System-->>User: response"
+    },
+    {
+      "id": "UML-005",
+      "title": "Main Workflow Activity Diagram",
+      "type": "activity",
+      "description": "one-line description",
+      "mermaid": "flowchart TD\\n  Start([Start]) --> A[Do step]\\n  A --> D{Valid?}\\n  D -->|Yes| B[Continue]\\n  D -->|No| A\\n  B --> End([End])"
+    },
+    {
+      "id": "UML-006",
+      "title": "Entity Lifecycle State Diagram",
+      "type": "state",
+      "description": "one-line description",
+      "mermaid": "stateDiagram-v2\\n  [*] --> Draft\\n  Draft --> Submitted: submit\\n  Submitted --> Approved: approve\\n  Submitted --> Rejected: reject\\n  Approved --> [*]"
+    },
+    {
+      "id": "UML-007",
+      "title": "System Component Diagram",
+      "type": "component",
+      "description": "one-line description",
+      "mermaid": "flowchart LR\\n  subgraph Client\\n    UI[Web App]\\n  end\\n  subgraph Server\\n    API[API Service]\\n    DB[(Database)]\\n  end\\n  UI --> API\\n  API --> DB"
     }
   ]
 }
 
 STRICT Mermaid syntax rules:
-1. flowchart TD for use case: actors as ((Label)), use cases as [Label], arrows as -->
-2. classDiagram: attributes as "+name Type", methods as "+method()", relations as "ClassA --> ClassB : label"
-3. sequenceDiagram: use actor for humans, participant for systems; arrows ->> (solid) or -->>(dashed)
-4. Node IDs must be alphanumeric with no spaces. Labels can have spaces inside quotes or parens.
-5. Every \\n in the JSON string is a real newline in the diagram. Do NOT use actual newlines in the JSON value.
-6. Keep each diagram concise (under 20 nodes/lines) for clarity.`,
+1. use_case: flowchart TD; actors as ((Label)), use cases as [Label], arrows -->
+2. class: classDiagram; attributes "+name Type", methods "+method()", relations "ClassA --> ClassB : label"
+3. er: erDiagram; relations like "A ||--o{ B : label"; attribute blocks "ENTITY {\\n  type name PK\\n}"
+4. sequence: sequenceDiagram; "actor" for humans, "participant" for systems; arrows ->> (solid) or -->> (dashed)
+5. activity: flowchart TD; start/end as ([Label]), actions as [Label], decisions as {Label?} with -->|Yes|/-->|No| branches
+6. state: stateDiagram-v2; "[*] --> StateName", transitions "A --> B: event"
+7. component: flowchart LR; group related parts in "subgraph Name ... end"; databases as [(Label)]
+8. Node IDs must be alphanumeric with no spaces. Labels may contain spaces inside quotes/parens/brackets.
+9. Every \\n in the JSON string is a real newline in the diagram. Do NOT use actual newlines in the JSON value.
+10. Each diagram should be substantive (8–18 nodes) yet readable — model the real entities, actors, and flows from the data below, not generic examples.`,
       `Project: ${projectName}
 System summary: ${s1.system_summary}
 Actors: ${s1.actors?.join(", ")}
 Key functional requirements:
-${s2.requirements?.slice(0, 8).map((r: any) => `${r.id}: ${r.title}`).join("\n")}
+${s2.requirements?.slice(0, 12).map((r: any) => `${r.id}: ${r.title} — ${r.description}`).join("\n")}
 Screens (derive domain entities and interactions from these):
 ${s7.screens?.map((sc: any) => `${sc.name}${sc.description ? ` — ${sc.description}` : ""}`).join("\n")}`,
         emit,

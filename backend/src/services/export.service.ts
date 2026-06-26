@@ -1,7 +1,17 @@
-import PDFDocument from "pdfkit";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
-import { PassThrough } from "stream";
+import {
+  Document, Packer, Paragraph, TextRun, HeadingLevel,
+  Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType,
+  PageBreak, TableOfContents, Header, Footer, PageNumber, ShadingType,
+} from "docx";
 import { Resvg } from "@resvg/resvg-js";
+import JSZip from "jszip";
+import { promises as fs } from "fs";
+import os from "os";
+import path from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -43,604 +53,291 @@ async function svgToPng(svg: string): Promise<Buffer> {
   return Buffer.from(rendered.asPng());
 }
 
-interface IEEESection {
-  title: string;
-  level: 1 | 2 | 3;
-  lines: string[];
-  diagramId?: string; // if set, embed PNG from diagramSvgs instead of text lines
-}
-
-function ieeeSections(data: Record<string, any>): IEEESection[] {
-  const sections: IEEESection[] = [];
-
-  const ov = data.extraction ?? {};
-
-  // ── Abstract (front matter) ───────────────────────────────────────────────
-  if (ov.abstract) {
-    sections.push({ level: 1, title: "Abstract", lines: [ov.abstract] });
-  }
-
-  // ── 1. Introduction ───────────────────────────────────────────────────────
-  sections.push({ level: 1, title: "1. Introduction", lines: [] });
-  let n1 = 0;
-  sections.push({
-    level: 2, title: `1.${++n1} Purpose`, lines: [
-      "This Software Requirements Specification (SRS) describes the functional and " +
-      "non-functional requirements for the system. It is prepared in accordance with " +
-      "IEEE Std 830-1998 and serves as the authoritative reference for system design, development, and testing.",
-    ],
-  });
-  if (ov.motivation) sections.push({ level: 2, title: `1.${++n1} Motivation`, lines: [ov.motivation] });
-  if (ov.problem_statement) sections.push({ level: 2, title: `1.${++n1} Problem Statement`, lines: [ov.problem_statement] });
-  sections.push({ level: 2, title: `1.${++n1} Scope`, lines: [ov.scope ?? ov.system_summary ?? "—"] });
-  if (ov.objectives?.length) {
-    sections.push({ level: 2, title: `1.${++n1} Objectives`, lines: ov.objectives.map((o: string, i: number) => `${i + 1}. ${o}`) });
-  }
-  if (ov.actors?.length) {
-    sections.push({ level: 2, title: `1.${++n1} Intended Users`, lines: [ov.actors.join(", ")] });
-  }
-  sections.push({
-    level: 2, title: `1.${++n1} Document Conventions`, lines: [
-      "Requirements prefixed FR- are functional. NFR- are non-functional. " +
-      "SR- are security requirements mapped to OWASP Top 10 (2021).",
-    ],
-  });
-
-  // ── 2. Overall Description ────────────────────────────────────────────────
-  sections.push({ level: 1, title: "2. Overall Description", lines: [] });
-  let n2 = 0;
-  sections.push({ level: 2, title: `2.${++n2} Product Perspective`, lines: [ov.product_perspective ?? ov.system_summary ?? "—"] });
-  if (ov.actors?.length) {
-    sections.push({ level: 2, title: `2.${++n2} User Characteristics`, lines: [ov.actors.join(", ")] });
-  }
-  if (ov.assumptions?.length) {
-    sections.push({ level: 2, title: `2.${++n2} Assumptions`, lines: ov.assumptions.map((a: string) => `  ${a}`) });
-  }
-  if (ov.constraints?.length) {
-    sections.push({ level: 2, title: `2.${++n2} Constraints`, lines: ov.constraints.map((c: string) => `  ${c}`) });
-  }
-  if (ov.extracted?.length) {
-    sections.push({
-      level: 2, title: `2.${++n2} Identified System Needs`,
-      lines: ov.extracted.map((r: string, i: number) => `${i + 1}. ${r}`),
-    });
-  }
-
-  // ── 3. Specific Requirements ──────────────────────────────────────────────
-  sections.push({ level: 1, title: "3. Specific Requirements", lines: [] });
-
-  // 3.1 Functional Requirements
-  if (data.functional_requirements?.requirements?.length) {
-    sections.push({ level: 2, title: "3.1 Functional Requirements (IEEE 830)", lines: [] });
-    data.functional_requirements.requirements.forEach((r: any, i: number) => {
-      const lines: string[] = [
-        `ID: ${r.id}    Priority: ${r.priority}`,
-        `Description: ${r.description}`,
-      ];
-      if (r.acceptance_criteria?.length) {
-        lines.push("Acceptance Criteria:");
-        r.acceptance_criteria.forEach((c: string) => lines.push(`  ✓ ${c}`));
-      }
-      lines.push("");
-      sections.push({ level: 3, title: `3.1.${i + 1}  ${r.id} — ${r.title}`, lines });
-    });
-  }
-
-  // 3.2 Non-Functional Requirements
-  if (data.non_functional_requirements?.requirements?.length) {
-    sections.push({ level: 2, title: "3.2 Non-Functional Requirements", lines: [] });
-    const cats = [...new Set(data.non_functional_requirements.requirements.map((r: any) => r.category))] as string[];
-    cats.forEach((cat, ci) => {
-      const catReqs = data.non_functional_requirements.requirements.filter((r: any) => r.category === cat);
-      const lines: string[] = [];
-      catReqs.forEach((r: any) => {
-        lines.push(`[${r.id}] ${r.title}`);
-        lines.push(`  ${r.description}`);
-        if (r.metric) lines.push(`  Metric: ${r.metric}`);
-        lines.push("");
-      });
-      sections.push({ level: 3, title: `3.2.${ci + 1}  ${cat}`, lines });
-    });
-  }
-
-  // 3.3 Security Requirements
-  if (data.security_requirements?.requirements?.length) {
-    sections.push({ level: 2, title: "3.3 Security Requirements (OWASP Top 10)", lines: [] });
-    data.security_requirements.requirements.forEach((r: any, i: number) => {
-      const lines: string[] = [
-        `Priority: ${r.priority}`,
-        `OWASP: ${r.owasp_category}`,
-        `Description: ${r.description}`,
-      ];
-      if (r.controls?.length) {
-        lines.push("Security Controls:");
-        r.controls.forEach((c: string) => lines.push(`  → ${c}`));
-      }
-      lines.push("");
-      sections.push({ level: 3, title: `3.3.${i + 1}  ${r.id} — ${r.title}`, lines });
-    });
-  }
-
-  // ── 4. Functional Test Cases ──────────────────────────────────────────────
-  if (data.functional_test_cases?.test_cases?.length) {
-    sections.push({ level: 1, title: "4. Functional Test Cases (IEEE 829)", lines: [] });
-    data.functional_test_cases.test_cases.forEach((tc: any, i: number) => {
-      const lines: string[] = [];
-      if (tc.fr_id) lines.push(`Covers: ${tc.fr_id}    Priority: ${tc.priority}`);
-      if (tc.preconditions) lines.push(`Preconditions: ${tc.preconditions}`);
-      if (tc.steps?.length) {
-        lines.push("Steps:");
-        tc.steps.forEach((s: string, si: number) => lines.push(`  ${si + 1}. ${s}`));
-      }
-      if (tc.expected_result) lines.push(`Expected: ${tc.expected_result}`);
-      lines.push("");
-      sections.push({ level: 2, title: `4.${i + 1}  ${tc.id} — ${tc.title}`, lines });
-    });
-  }
-
-  // ── 5. Security Test Cases ────────────────────────────────────────────────
-  if (data.security_test_cases?.test_cases?.length) {
-    sections.push({ level: 1, title: "5. Security Test Cases", lines: [] });
-    data.security_test_cases.test_cases.forEach((tc: any, i: number) => {
-      const lines: string[] = [];
-      if (tc.sr_id) lines.push(`Covers: ${tc.sr_id}    Severity: ${tc.severity}`);
-      if (tc.attack_vector) lines.push(`Attack Vector: ${tc.attack_vector}`);
-      if (tc.steps?.length) {
-        lines.push("Steps:");
-        tc.steps.forEach((s: string, si: number) => lines.push(`  ${si + 1}. ${s}`));
-      }
-      if (tc.expected_result) lines.push(`Expected: ${tc.expected_result}`);
-      lines.push("");
-      sections.push({ level: 2, title: `5.${i + 1}  ${tc.id} — ${tc.title}`, lines });
-    });
-  }
-
-  // ── Appendix A: Generated UI Screens ─────────────────────────────────────
-  if (data.ui_code?.screens?.length) {
-    sections.push({ level: 1, title: "Appendix A: Generated UI Screens", lines: [] });
-    data.ui_code.screens.forEach((sc: any, i: number) => {
-      const lines: string[] = [];
-      if (sc.route) lines.push(`Route: ${sc.route}`);
-      if (sc.description) lines.push(sc.description);
-      lines.push("Generated as standalone HTML + Tailwind CSS page.");
-      sections.push({ level: 2, title: `A.${i + 1}  ${sc.id} — ${sc.name}`, lines });
-    });
-  }
-
-  // ── Appendix B: UML Diagrams ─────────────────────────────────────────────
-  if (data.uml_diagrams?.diagrams?.length) {
-    sections.push({ level: 1, title: "Appendix B: UML Diagrams", lines: [] });
-    data.uml_diagrams.diagrams.forEach((d: any, i: number) => {
-      sections.push({
-        level: 2,
-        title: `B.${i + 1}  ${d.title}`,
-        lines: [
-          `Type: ${d.type}`,
-          d.description ? `Description: ${d.description}` : "",
-        ].filter(Boolean),
-        diagramId: d.id, // triggers PNG embedding when diagramSvgs is provided
-      });
-    });
-  }
-
-  // ── Appendix C: Traceability Matrix ──────────────────────────────────────
-  if (data.traceability_matrix) {
-    const cov = data.traceability_matrix.coverage;
-    const lines: string[] = [];
-    if (cov) lines.push(`Coverage: ${cov.covered_frs}/${cov.total_frs} FRs · ${cov.total_tcs} TCs · ${cov.percentage}%`);
-    lines.push("");
-    (data.traceability_matrix.matrix ?? []).forEach((row: any) => {
-      lines.push(`${row.fr_id}: ${row.fr_title}`);
-      lines.push(`  Tests:    ${(row.test_cases ?? []).join(", ")}`);
-      lines.push(`  Security: ${(row.security_reqs ?? []).join(", ")}`);
-      lines.push("");
-    });
-    sections.push({ level: 1, title: "Appendix C: Traceability Matrix", lines });
-  }
-
-  return sections;
-}
-
-// ─── PDF ─────────────────────────────────────────────────────────────────────
-
-// Thesis palette (shared with the LaTeX export).
-const NAVY = "#1A3A52";
-const BLUE = "#2563EB";
-const GREY = "#5D6B78";
-const ROWGREY = "#F4F6F9";
-const TEXT = "#243042";
-const LIGHT = "#94A3B8";
-const RULE = "#E5E7EB";
-
-export async function generatePDF(
-  projectName: string,
-  artifacts: any[],
-  diagramSvgs?: Record<string, string>,
-  meta?: ExportMeta
-): Promise<Buffer> {
-  const data = flattenArtifacts(artifacts);
-  const ov = data.extraction ?? {};
-  const date = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
-
-  const doc = new PDFDocument({ margin: 50, size: "A4" });
-  const chunks: Buffer[] = [];
-  const streamDone = new Promise<Buffer>((resolve, reject) => {
-    doc.on("data", (c) => chunks.push(c));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-  });
-
-  const LEFT = 50;
-  const RIGHT = 545;
-  const WIDTH = RIGHT - LEFT; // 495
-  const BOTTOM = doc.page.height - 64;
-  let pageNo = 1; // title page
-
-  // Running header + footer, drawn on every page added after the title page.
-  // lineBreak:false + the re-entry guard keep the bottom-of-page footer text
-  // from triggering pdfkit's auto-pagination (which would recurse via pageAdded).
-  let decorating = false;
-  const decorate = () => {
-    if (decorating) return;
-    decorating = true;
-    pageNo++;
-    doc.save();
-    doc.font("Helvetica").fontSize(8).fillColor(GREY)
-      .text(`${projectName}  —  Software Requirements Specification`, LEFT, 28, { width: WIDTH, align: "right", lineBreak: false });
-    doc.strokeColor(RULE).lineWidth(0.5).moveTo(LEFT, 42).lineTo(RIGHT, 42).stroke();
-    doc.fillColor(GREY).fontSize(8).text(`Page ${pageNo}`, LEFT, doc.page.height - 40, { width: WIDTH, align: "center", lineBreak: false });
-    doc.restore();
-    doc.x = LEFT;
-    doc.y = 58;
-    decorating = false;
-  };
-
-  // ── Heading / text helpers ──────────────────────────────────────────────────
-  let chapterNo = 0;
-  const heading = (title: string, numbered: boolean) => {
-    if (doc.y > BOTTOM - 96) doc.addPage();
-    else doc.moveDown(1);
-    if (numbered) {
-      chapterNo++;
-      doc.font("Helvetica").fontSize(9).fillColor(GREY).text(`CHAPTER ${chapterNo}`, LEFT, doc.y, { characterSpacing: 1.5 });
-      doc.moveDown(0.15);
-    }
-    doc.font("Helvetica-Bold").fontSize(numbered ? 20 : 18).fillColor(NAVY).text(title, LEFT, doc.y, { width: WIDTH });
-    doc.moveDown(0.2);
-    doc.strokeColor(NAVY).lineWidth(1.5).moveTo(LEFT, doc.y).lineTo(RIGHT, doc.y).stroke();
-    doc.moveDown(0.7);
-  };
-  const chapter = (t: string) => heading(t, true);
-  const front = (t: string) => heading(t, false);
-
-  const section = (title: string) => {
-    if (doc.y > BOTTOM - 48) doc.addPage();
-    doc.moveDown(0.4);
-    doc.font("Helvetica-Bold").fontSize(13).fillColor(NAVY).text(title, LEFT, doc.y, { width: WIDTH });
-    doc.moveDown(0.3);
-  };
-  const para = (t?: string) => {
-    if (!t) return;
-    doc.font("Helvetica").fontSize(10).fillColor(TEXT).text(t, LEFT, doc.y, { width: WIDTH, align: "justify" });
-    doc.moveDown(0.45);
-  };
-  const list = (items: string[], ordered: boolean) => {
-    items.forEach((it, i) => {
-      if (doc.y > BOTTOM) doc.addPage();
-      const marker = ordered ? `${i + 1}.` : "•";
-      const y = doc.y;
-      doc.font("Helvetica").fontSize(10).fillColor(ordered ? GREY : BLUE).text(marker, LEFT + 6, y, { width: 18 });
-      doc.font("Helvetica").fontSize(10).fillColor(TEXT).text(it, LEFT + 28, y, { width: WIDTH - 28 });
-      doc.moveDown(0.2);
-    });
-    doc.moveDown(0.3);
-  };
-
-  // ── Navy-headed table ───────────────────────────────────────────────────────
-  const table = (headers: string[], widths: number[], rows: string[][]) => {
-    const PADX = 6;
-    const PADY = 5;
-    const drawHeader = () => {
-      const h = 22;
-      if (doc.y + h > BOTTOM) doc.addPage();
-      doc.save();
-      doc.rect(LEFT, doc.y, WIDTH, h).fill(NAVY);
-      doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(9);
-      let x = LEFT;
-      headers.forEach((htxt, ci) => {
-        doc.text(htxt, x + PADX, doc.y + PADY + 1, { width: widths[ci] - 2 * PADX });
-        x += widths[ci];
-      });
-      doc.restore();
-      doc.y += h;
-    };
-    drawHeader();
-    rows.forEach((row, ri) => {
-      doc.font("Helvetica").fontSize(9).fillColor(TEXT);
-      let rowH = 0;
-      row.forEach((c, ci) => {
-        const hh = doc.heightOfString(c || "", { width: widths[ci] - 2 * PADX });
-        if (hh > rowH) rowH = hh;
-      });
-      rowH += 2 * PADY;
-      if (doc.y + rowH > BOTTOM) { doc.addPage(); drawHeader(); doc.font("Helvetica").fontSize(9).fillColor(TEXT); }
-      const yTop = doc.y;
-      if (ri % 2 === 1) { doc.save(); doc.rect(LEFT, yTop, WIDTH, rowH).fill(ROWGREY); doc.restore(); }
-      doc.fillColor(TEXT).font("Helvetica").fontSize(9);
-      let x = LEFT;
-      row.forEach((c, ci) => {
-        doc.text(c || "", x + PADX, yTop + PADY, { width: widths[ci] - 2 * PADX });
-        x += widths[ci];
-      });
-      doc.strokeColor(RULE).lineWidth(0.5).moveTo(LEFT, yTop + rowH).lineTo(RIGHT, yTop + rowH).stroke();
-      doc.y = yTop + rowH;
-    });
-    doc.moveDown(0.7);
-  };
-
-  // ── Title page ──────────────────────────────────────────────────────────────
-  doc.y = 200;
-  doc.font("Helvetica-Bold").fontSize(13).fillColor(NAVY).text("SOFTWARE REQUIREMENTS SPECIFICATION", LEFT, doc.y, { width: WIDTH, align: "center", characterSpacing: 1 });
-  doc.moveDown(1);
-  doc.strokeColor(NAVY).lineWidth(1).moveTo(LEFT + 70, doc.y).lineTo(RIGHT - 70, doc.y).stroke();
-  doc.moveDown(1);
-  doc.font("Helvetica-Bold").fontSize(30).fillColor(NAVY).text(projectName, LEFT, doc.y, { width: WIDTH, align: "center" });
-  doc.moveDown(0.5);
-  doc.font("Helvetica-Oblique").fontSize(13).fillColor(BLUE).text("Functional, Non-Functional & Security Requirements", LEFT, doc.y, { width: WIDTH, align: "center" });
-  doc.moveDown(0.8);
-  doc.strokeColor(NAVY).lineWidth(1).moveTo(LEFT + 70, doc.y).lineTo(RIGHT - 70, doc.y).stroke();
-  doc.moveDown(2.2);
-  doc.font("Helvetica").fontSize(11).fillColor(TEXT).text("A Software Requirements Specification prepared in accordance with IEEE Std 830-1998.", LEFT, doc.y, { width: WIDTH, align: "center" });
-  doc.moveDown(1.5);
-  doc.fontSize(10).fillColor(GREY).text(`Generated ${date}`, LEFT, doc.y, { width: WIDTH, align: "center" });
-
-  // Document-control block (organization, author, contact, version) — only the
-  // fields that were supplied are shown, each on its own centered line.
-  const mrows = metaRows(meta);
-  if (mrows.length) {
-    doc.moveDown(1.5);
-    mrows.forEach(([label, value]) => {
-      doc.font("Helvetica-Bold").fontSize(10).fillColor(NAVY).text(`${label}:  `, { continued: true, align: "center" })
-        .font("Helvetica").fillColor(TEXT).text(value);
-    });
-  }
-
-  doc.font("Helvetica").fontSize(9).fillColor(LIGHT).text("Auto-generated by Req2UI", LEFT, doc.page.height - 96, { width: WIDTH, align: "center" });
-
-  // Begin decorated content pages.
-  doc.on("pageAdded", decorate);
-  doc.addPage();
-
-  // ── Front matter ────────────────────────────────────────────────────────────
-  front("Declaration of Originality");
-  para(`This Software Requirements Specification for "${projectName}" documents the functional, non-functional, and security requirements of the system. It was produced from a structured requirements-analysis pipeline and is intended to serve as the authoritative reference for the system's design, implementation, and testing. All requirements are derived from the supplied project description and are organised following the IEEE 830 recommended practice.`);
-
-  if (ov.abstract) { front("Abstract"); para(ov.abstract); }
-
-  front("Abbreviations");
-  const abbreviations: [string, string][] = [
-    ["SRS", "Software Requirements Specification."],
-    ["FR", "Functional Requirement."],
-    ["NFR", "Non-Functional Requirement."],
-    ["SR", "Security Requirement (mapped to the OWASP Top 10, 2021)."],
-    ["TC", "Functional Test Case (IEEE 829)."],
-    ["STC", "Security Test Case."],
-    ["OWASP", "Open Worldwide Application Security Project."],
-    ["UML", "Unified Modeling Language."],
-  ];
-  abbreviations.forEach(([label, def]) => {
-    if (doc.y > BOTTOM) doc.addPage();
-    const y = doc.y;
-    doc.font("Helvetica-Bold").fontSize(9).fillColor(NAVY).text(label, LEFT, y, { width: 70 });
-    doc.font("Helvetica").fontSize(9).fillColor(TEXT).text(def, LEFT + 80, y, { width: WIDTH - 80 });
-    doc.moveDown(0.3);
-  });
-
-  // ── Chapter 1: Introduction ─────────────────────────────────────────────────
-  chapter("Introduction");
-  section("Purpose");
-  para(`This document specifies the requirements for ${projectName}. It is prepared in accordance with IEEE Std 830-1998 and serves as the authoritative reference for the design, development, and testing of the system. Requirements prefixed FR- are functional, NFR- non-functional, and SR- security requirements mapped to the OWASP Top 10 (2021).`);
-  if (ov.motivation) { section("Motivation"); para(ov.motivation); }
-  if (ov.problem_statement) { section("Problem Statement"); para(ov.problem_statement); }
-  section("Scope");
-  para(ov.scope ?? ov.system_summary ?? "—");
-  if (ov.objectives?.length) { section("Objectives"); list(ov.objectives, true); }
-  if (ov.actors?.length) { section("Intended Users"); list(ov.actors, false); }
-
-  // ── Chapter 2: Overall Description ──────────────────────────────────────────
-  chapter("Overall Description");
-  section("Product Perspective");
-  para(ov.product_perspective ?? ov.system_summary ?? "—");
-  if (ov.actors?.length) { section("User Characteristics"); list(ov.actors, false); }
-  if (ov.assumptions?.length) { section("Assumptions"); list(ov.assumptions, false); }
-  if (ov.constraints?.length) { section("Constraints"); list(ov.constraints, false); }
-  if (ov.extracted?.length) { section("Identified System Needs"); list(ov.extracted, true); }
-
-  // ── Chapter 3: Specific Requirements ────────────────────────────────────────
-  const frs = data.functional_requirements?.requirements ?? [];
-  const nfrs = data.non_functional_requirements?.requirements ?? [];
-  const srs = data.security_requirements?.requirements ?? [];
-  if (frs.length || nfrs.length || srs.length) {
-    chapter("Specific Requirements");
-    if (frs.length) {
-      section("Functional Requirements (IEEE 830)");
-      table(["ID", "Priority", "Requirement"], [70, 70, 355], frs.map((r: any) => {
-        let cell = r.title ? `${r.title}\n` : "";
-        cell += r.description ?? "";
-        if (r.acceptance_criteria?.length) cell += `\nAcceptance: ${r.acceptance_criteria.join("; ")}`;
-        return [r.id ?? "", r.priority ?? "", cell];
-      }));
-    }
-    if (nfrs.length) {
-      section("Non-Functional Requirements");
-      table(["ID", "Category", "Requirement"], [70, 110, 315], nfrs.map((r: any) => {
-        let cell = r.title ? `${r.title}\n` : "";
-        cell += r.description ?? "";
-        if (r.metric) cell += `\nMetric: ${r.metric}`;
-        return [r.id ?? "", r.category ?? "", cell];
-      }));
-    }
-    if (srs.length) {
-      section("Security Requirements (OWASP Top 10)");
-      table(["ID", "OWASP Category", "Requirement"], [65, 120, 310], srs.map((r: any) => {
-        let cell = r.title ? `${r.title}\n` : "";
-        cell += r.description ?? "";
-        if (r.priority) cell += `\nPriority: ${r.priority}`;
-        if (r.controls?.length) cell += `\nControls: ${r.controls.join("; ")}`;
-        return [r.id ?? "", r.owasp_category ?? "", cell];
-      }));
-    }
-  }
-
-  // ── Chapter 4: Functional Test Cases ────────────────────────────────────────
-  const tcs = data.functional_test_cases?.test_cases ?? [];
-  if (tcs.length) {
-    chapter("Functional Test Cases (IEEE 829)");
-    table(["ID", "Covers", "Steps", "Expected Result"], [65, 90, 175, 165], tcs.map((tc: any) => {
-      let steps = (tc.steps ?? []).map((s: string, i: number) => `${i + 1}. ${s}`).join("\n");
-      if (tc.preconditions) steps = `Pre: ${tc.preconditions}\n${steps}`;
-      const covers = [tc.fr_id ?? "", tc.priority ? `(${tc.priority})` : ""].filter(Boolean).join(" ");
-      return [tc.id ?? "", covers, steps, tc.expected_result ?? ""];
-    }));
-  }
-
-  // ── Chapter 5: Security Test Cases ──────────────────────────────────────────
-  const stcs = data.security_test_cases?.test_cases ?? [];
-  if (stcs.length) {
-    chapter("Security Test Cases");
-    table(["ID", "Covers", "Attack Vector & Steps", "Expected Result"], [65, 90, 175, 165], stcs.map((tc: any) => {
-      const steps = (tc.steps ?? []).map((s: string, i: number) => `${i + 1}. ${s}`).join("\n");
-      let attack = tc.attack_vector ?? "";
-      if (steps) attack += (attack ? "\n" : "") + steps;
-      const covers = [tc.sr_id ?? "", tc.severity ? `(${tc.severity})` : ""].filter(Boolean).join(" ");
-      return [tc.id ?? "", covers, attack, tc.expected_result ?? ""];
-    }));
-  }
-
-  // ── Chapter 6: Traceability Matrix ──────────────────────────────────────────
-  const tm = data.traceability_matrix;
-  if (tm) {
-    chapter("Traceability Matrix");
-    if (tm.coverage) {
-      const c = tm.coverage;
-      para(`Requirement coverage: ${c.covered_frs ?? ""} of ${c.total_frs ?? ""} functional requirements traced across ${c.total_tcs ?? ""} test cases (${c.percentage ?? ""}%).`);
-    }
-    const rows = (tm.matrix ?? []).map((row: any) => [
-      row.fr_id ?? "",
-      row.fr_title ?? "",
-      (row.test_cases ?? []).join(", "),
-      (row.security_reqs ?? []).join(", "),
-    ]);
-    if (rows.length) table(["FR", "Title", "Test Cases", "Security"], [65, 170, 140, 120], rows);
-  }
-
-  // ── Chapter 7: UML Diagrams ─────────────────────────────────────────────────
-  const diagrams = data.uml_diagrams?.diagrams ?? [];
-  if (diagrams.length) {
-    chapter("UML Diagrams");
-    for (const d of diagrams) {
-      section(d.title ?? "Diagram");
-      if (d.description) para(d.description);
-      if (diagramSvgs?.[d.id]) {
-        try {
-          const png = await svgToPng(diagramSvgs[d.id]);
-          if (doc.y > BOTTOM - 200) doc.addPage();
-          doc.image(png, LEFT, doc.y, { fit: [WIDTH, 340], align: "center" });
-          doc.moveDown(1);
-        } catch {
-          doc.font("Helvetica-Oblique").fontSize(9).fillColor(GREY).text("[Diagram rendering unavailable]", LEFT, doc.y, { width: WIDTH });
-          doc.moveDown(0.5);
-        }
-      } else {
-        doc.font("Helvetica-Oblique").fontSize(9).fillColor(GREY).text("Diagram available in the app (Mermaid).", LEFT, doc.y, { width: WIDTH });
-        doc.moveDown(0.5);
-      }
-    }
-  }
-
-  // ── Appendix A: Generated UI Screens ────────────────────────────────────────
-  const screens = data.ui_code?.screens ?? [];
-  if (screens.length) {
-    front("Appendix A — Generated UI Screens");
-    para("The platform generated the following screens as standalone HTML + Tailwind CSS pages.");
-    table(["Screen", "Route", "Description"], [90, 120, 285], screens.map((sc: any) => [
-      sc.id ?? sc.name ?? "",
-      sc.route ?? "",
-      sc.description ?? "",
-    ]));
-  }
-
-  doc.end();
-  return streamDone;
-}
 
 // ─── DOCX ────────────────────────────────────────────────────────────────────
+//
+// The Word export deliberately mirrors the LaTeX report (same chapter order,
+// the same colour-headed requirement tables, title page, TOC and page numbers)
+// so the two formats stay visually consistent. Both renderers read the same
+// artifact fields, so any change to one (e.g. a new requirement column) should
+// be mirrored in the other.
+
+// Thesis palette, shared with the LaTeX export's \definecolor block.
+const DX_NAVY = "1A3A52";
+const DX_BLUE = "2563EB";
+const DX_GREY = "5D6B78";
+const DX_ROW = "F4F6F9";
+const DX_TEXT = "243042";
+
+// A run of inline text with optional emphasis; a Line is a list of runs that
+// share one paragraph; a Cell is a stack of Lines (paragraph breaks within a cell).
+type DxRun = { text: string; bold?: boolean; italic?: boolean };
+type DxCell = DxRun[][];
+
+const txt = (text: string): DxCell => [[{ text }]];
+const bold = (text: string): DxCell => [[{ text, bold: true }]];
+
+function dxParas(cell: DxCell, color = DX_TEXT): Paragraph[] {
+  return cell.map(
+    (line) =>
+      new Paragraph({
+        spacing: { after: 20 },
+        children: line.map((r) => new TextRun({ text: r.text, bold: r.bold, italics: r.italic, size: 18, color })),
+      })
+  );
+}
+
+const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } as const;
+const THIN = { style: BorderStyle.SINGLE, size: 2, color: "E5E7EB" } as const;
+
+/** A page-breakable table with a navy header row and light zebra striping. */
+function dxTable(headers: string[], widths: number[], rows: DxCell[][]): Table {
+  const headerRow = new TableRow({
+    tableHeader: true,
+    children: headers.map(
+      (h, i) =>
+        new TableCell({
+          width: { size: widths[i], type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.CLEAR, color: "auto", fill: DX_NAVY },
+          margins: { top: 40, bottom: 40, left: 80, right: 80 },
+          children: [
+            new Paragraph({ children: [new TextRun({ text: h, bold: true, color: "FFFFFF", size: 18 })] }),
+          ],
+        })
+    ),
+  });
+
+  const bodyRows = rows.map(
+    (cells, ri) =>
+      new TableRow({
+        children: cells.map(
+          (cell, ci) =>
+            new TableCell({
+              width: { size: widths[ci], type: WidthType.PERCENTAGE },
+              shading: ri % 2 === 1 ? { type: ShadingType.CLEAR, color: "auto", fill: DX_ROW } : undefined,
+              margins: { top: 40, bottom: 40, left: 80, right: 80 },
+              children: dxParas(cell),
+            })
+        ),
+      })
+  );
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: { top: THIN, bottom: THIN, left: NO_BORDER, right: NO_BORDER, insideHorizontal: THIN, insideVertical: NO_BORDER },
+    rows: [headerRow, ...bodyRows],
+  });
+}
+
+/** Manually-numbered heading (the LaTeX `report` numbers chapters/sections; Word
+ *  built-in heading styles drive the TOC, so we supply the numbers as text). */
+function dxHeading(text: string, level: 1 | 2): Paragraph {
+  return new Paragraph({
+    heading: level === 1 ? HeadingLevel.HEADING_1 : HeadingLevel.HEADING_2,
+    spacing: { before: level === 1 ? 240 : 160, after: 80 },
+    children: [new TextRun({ text, bold: true, color: level === 1 ? DX_NAVY : DX_BLUE })],
+  });
+}
+
+const dxPara = (text: string, opts: { italic?: boolean; color?: string } = {}): Paragraph =>
+  new Paragraph({
+    spacing: { after: 120 },
+    alignment: AlignmentType.JUSTIFIED,
+    children: [new TextRun({ text, italics: opts.italic, size: 20, color: opts.color ?? DX_TEXT })],
+  });
+
+const dxBullets = (items: string[]): Paragraph[] =>
+  items.map((it) => new Paragraph({ bullet: { level: 0 }, spacing: { after: 40 }, children: [new TextRun({ text: it, size: 20, color: DX_TEXT })] }));
 
 export async function generateDOCX(
   projectName: string,
   artifacts: any[],
   meta?: ExportMeta
 ): Promise<Buffer> {
-  const children: any[] = [
-    new Paragraph({
-      children: [
-        new TextRun({ text: "Software Requirements Specification", bold: true, size: 36, color: "0f172a" }),
-      ],
-      alignment: "center" as any,
-    }),
-    new Paragraph({
-      children: [new TextRun({ text: projectName, bold: true, size: 28, color: "1e293b" })],
-      alignment: "center" as any,
-    }),
-    new Paragraph({
-      children: [new TextRun({ text: "IEEE Std 830-1998", size: 20, color: "64748b" })],
-      alignment: "center" as any,
-    }),
-    new Paragraph({
-      children: [new TextRun({ text: `Generated ${new Date().toLocaleDateString()}`, size: 18, color: "94a3b8" })],
-      alignment: "center" as any,
-    }),
-    // Document-control block: one centered line per supplied field.
+  const data = flattenArtifacts(artifacts);
+  const ov = data.extraction ?? {};
+  const date = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
+  const C: any[] = [];
+
+  // ── Title page ─────────────────────────────────────────────────────────────
+  const centered = (children: TextRun[]) => new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160 }, children });
+  C.push(
+    new Paragraph({ spacing: { before: 2400 } }),
+    centered([new TextRun({ text: "Software Requirements Specification", bold: true, size: 30, color: DX_NAVY })]),
+    centered([new TextRun({ text: projectName, bold: true, size: 56, color: DX_NAVY })]),
+    centered([new TextRun({ text: "Functional, Non-Functional & Security Requirements", italics: true, size: 24, color: DX_BLUE } as any)]),
+    centered([new TextRun({ text: "Prepared in accordance with IEEE Std 830-1998.", size: 22, color: DX_TEXT })]),
+    centered([new TextRun({ text: `Generated ${date}`, size: 20, color: DX_GREY })]),
     ...metaRows(meta).map(([label, value]) =>
-      new Paragraph({
-        children: [
-          new TextRun({ text: `${label}: `, bold: true, size: 18, color: "475569" }),
-          new TextRun({ text: value, size: 18, color: "475569" }),
-        ],
-        alignment: "center" as any,
-      })
+      centered([
+        new TextRun({ text: `${label}: `, bold: true, size: 20, color: DX_NAVY }),
+        new TextRun({ text: value, size: 20, color: DX_TEXT }),
+      ])
     ),
-    new Paragraph({ text: "" }),
-  ];
+    new Paragraph({ children: [new PageBreak()] }),
+  );
 
-  const sections = ieeeSections(flattenArtifacts(artifacts));
-  const headingLevel = [
-    undefined,
-    HeadingLevel.HEADING_1,
-    HeadingLevel.HEADING_2,
-    HeadingLevel.HEADING_3,
-  ] as const;
+  // ── Abstract & contents ────────────────────────────────────────────────────
+  if (ov.abstract || ov.system_summary) {
+    C.push(dxHeading("Abstract", 1), dxPara(ov.abstract ?? ov.system_summary));
+  }
+  C.push(
+    dxHeading("Contents", 1),
+    new TableOfContents("Table of Contents", { hyperlink: true, headingStyleRange: "1-2" }),
+    new Paragraph({ children: [new PageBreak()] }),
+  );
 
-  sections.forEach(({ title, level, lines }) => {
-    children.push(new Paragraph({ text: title, heading: headingLevel[level] }));
+  // ── 1. Introduction ────────────────────────────────────────────────────────
+  C.push(dxHeading("1. Introduction", 1));
+  C.push(dxHeading("1.1 Purpose", 2),
+    dxPara(`This document specifies the requirements for ${projectName}. It is prepared in accordance with IEEE Std 830-1998 and serves as the authoritative reference for the design, development, and testing of the system. Requirements prefixed FR- are functional, NFR- non-functional, and SR- security requirements mapped to the OWASP Top 10 (2021).`));
+  let s1 = 1;
+  if (ov.motivation) C.push(dxHeading(`1.${++s1} Motivation`, 2), dxPara(ov.motivation));
+  if (ov.problem_statement) C.push(dxHeading(`1.${++s1} Problem Statement`, 2), dxPara(ov.problem_statement));
+  if (ov.scope ?? ov.system_summary) C.push(dxHeading(`1.${++s1} Scope`, 2), dxPara(ov.scope ?? ov.system_summary));
+  if (ov.objectives?.length) C.push(dxHeading(`1.${++s1} Objectives`, 2), ...dxBullets(ov.objectives));
+  if (ov.actors?.length) C.push(dxHeading(`1.${++s1} Intended Users`, 2), ...dxBullets(ov.actors));
 
-    lines.forEach((line) => {
-      if (line.trim() === "") {
-        children.push(new Paragraph({ text: "" }));
-        return;
-      }
-      const isBullet = line.startsWith("  ");
-      children.push(
-        new Paragraph({
-          children: [new TextRun({ text: line, size: 18, color: "334155" })],
-          indent: isBullet ? { left: 720 } : undefined,
-        }),
-      );
+  // ── 2. Overall Description ─────────────────────────────────────────────────
+  C.push(dxHeading("2. Overall Description", 1));
+  let s2 = 0;
+  if (ov.product_perspective ?? ov.system_summary) C.push(dxHeading(`2.${++s2} Product Perspective`, 2), dxPara(ov.product_perspective ?? ov.system_summary));
+  if (ov.actors?.length) C.push(dxHeading(`2.${++s2} User Characteristics`, 2), ...dxBullets(ov.actors));
+  if (ov.assumptions?.length) C.push(dxHeading(`2.${++s2} Assumptions`, 2), ...dxBullets(ov.assumptions));
+  if (ov.constraints?.length) C.push(dxHeading(`2.${++s2} Constraints`, 2), ...dxBullets(ov.constraints));
+  if (ov.extracted?.length) C.push(dxHeading(`2.${++s2} Identified System Needs`, 2), ...dxBullets(ov.extracted));
+
+  // ── 3. Specific Requirements ───────────────────────────────────────────────
+  C.push(dxHeading("3. Specific Requirements", 1));
+
+  const frs = data.functional_requirements?.requirements ?? [];
+  if (frs.length) {
+    C.push(dxHeading("3.1 Functional Requirements (IEEE 830)", 2),
+      dxPara("The following functional requirements define the behaviour the system shall exhibit."));
+    const rows: DxCell[][] = frs.map((r: any) => {
+      const req: DxRun[][] = [];
+      if (r.title) req.push([{ text: r.title, bold: true }]);
+      req.push([{ text: r.description ?? "" }]);
+      if (r.acceptance_criteria?.length) req.push([{ text: "Acceptance: ", italic: true }, { text: r.acceptance_criteria.join("; ") }]);
+      return [bold(r.id ?? ""), txt(r.priority ?? ""), req];
     });
-    children.push(new Paragraph({ text: "" }));
-  });
+    C.push(dxTable(["ID", "Priority", "Requirement"], [15, 15, 70], rows));
+  }
 
-  const doc = new Document({ sections: [{ properties: {}, children }] });
+  const nfrs = data.non_functional_requirements?.requirements ?? [];
+  if (nfrs.length) {
+    C.push(dxHeading("3.2 Non-Functional Requirements", 2));
+    const rows: DxCell[][] = nfrs.map((r: any) => {
+      const req: DxRun[][] = [];
+      if (r.title) req.push([{ text: r.title, bold: true }]);
+      req.push([{ text: r.description ?? "" }]);
+      if (r.metric) req.push([{ text: "Metric: ", italic: true }, { text: r.metric }]);
+      return [bold(r.id ?? ""), txt(r.category ?? ""), req];
+    });
+    C.push(dxTable(["ID", "Category", "Requirement"], [15, 22, 63], rows));
+  }
+
+  const srs = data.security_requirements?.requirements ?? [];
+  if (srs.length) {
+    C.push(dxHeading("3.3 Security Requirements (OWASP Top 10)", 2));
+    const rows: DxCell[][] = srs.map((r: any) => {
+      const req: DxRun[][] = [];
+      if (r.title) req.push([{ text: r.title, bold: true }]);
+      req.push([{ text: r.description ?? "" }]);
+      if (r.priority) req.push([{ text: "Priority: ", italic: true }, { text: r.priority }]);
+      if (r.controls?.length) req.push([{ text: "Controls: ", italic: true }, { text: r.controls.join("; ") }]);
+      return [bold(r.id ?? ""), txt(r.owasp_category ?? ""), req];
+    });
+    C.push(dxTable(["ID", "OWASP Category", "Requirement"], [14, 26, 60], rows));
+  }
+
+  // ── 4. Functional Test Cases ───────────────────────────────────────────────
+  const tcs = data.functional_test_cases?.test_cases ?? [];
+  if (tcs.length) {
+    C.push(dxHeading("4. Functional Test Cases (IEEE 829)", 1));
+    const rows: DxCell[][] = tcs.map((tc: any) => {
+      const steps: DxRun[][] = [];
+      if (tc.preconditions) steps.push([{ text: "Pre: ", italic: true }, { text: tc.preconditions }]);
+      (tc.steps ?? []).forEach((s: string, i: number) => steps.push([{ text: `${i + 1}. ${s}` }]));
+      const covers = [tc.fr_id ? `Covers ${tc.fr_id}` : "", tc.priority ? `(${tc.priority})` : ""].filter(Boolean).join(" ");
+      return [bold(tc.id ?? ""), txt(covers), steps.length ? steps : txt(""), txt(tc.expected_result ?? "")];
+    });
+    C.push(dxTable(["ID", "Covers", "Steps", "Expected Result"], [13, 18, 39, 30], rows));
+  }
+
+  // ── 5. Security Test Cases ─────────────────────────────────────────────────
+  const stcs = data.security_test_cases?.test_cases ?? [];
+  if (stcs.length) {
+    C.push(dxHeading("5. Security Test Cases", 1));
+    const rows: DxCell[][] = stcs.map((tc: any) => {
+      const attack: DxRun[][] = [];
+      if (tc.attack_vector) attack.push([{ text: tc.attack_vector }]);
+      (tc.steps ?? []).forEach((s: string, i: number) => attack.push([{ text: `${i + 1}. ${s}` }]));
+      const covers = [tc.sr_id ? `Covers ${tc.sr_id}` : "", tc.severity ? `(${tc.severity})` : ""].filter(Boolean).join(" ");
+      return [bold(tc.id ?? ""), txt(covers), attack.length ? attack : txt(""), txt(tc.expected_result ?? "")];
+    });
+    C.push(dxTable(["ID", "Covers", "Attack Vector & Steps", "Expected Result"], [13, 18, 39, 30], rows));
+  }
+
+  // ── 6. Traceability Matrix ─────────────────────────────────────────────────
+  const tm = data.traceability_matrix;
+  if (tm) {
+    C.push(dxHeading("6. Traceability Matrix", 1));
+    const cov = tm.coverage;
+    if (cov) {
+      C.push(dxPara(`Requirement coverage: ${cov.covered_frs ?? ""} of ${cov.total_frs ?? ""} functional requirements traced across ${cov.total_tcs ?? ""} test cases (${cov.percentage ?? ""}%).`));
+    }
+    const rows: DxCell[][] = (tm.matrix ?? []).map((row: any) => [
+      bold(row.fr_id ?? ""),
+      txt(row.fr_title ?? ""),
+      txt((row.test_cases ?? []).join(", ")),
+      txt((row.security_reqs ?? []).join(", ")),
+    ]);
+    if (rows.length) C.push(dxTable(["FR", "Title", "Test Cases", "Security"], [14, 40, 26, 20], rows));
+  }
+
+  // ── 7. UML Diagrams ────────────────────────────────────────────────────────
+  const diagrams = data.uml_diagrams?.diagrams ?? [];
+  if (diagrams.length) {
+    C.push(dxHeading("7. UML Diagrams", 1));
+    for (const d of diagrams) {
+      C.push(dxHeading(d.title ?? "Diagram", 2));
+      if (d.description) C.push(dxPara(d.description));
+      // No rasterised image on this (header-less GET) route, so the Mermaid source
+      // is shown in a monospaced block — matching the LaTeX verbatim fallback.
+      for (const ml of String(d.mermaid ?? "").split("\n")) {
+        C.push(new Paragraph({ children: [new TextRun({ text: ml, font: "Consolas", size: 16, color: DX_GREY })] }));
+      }
+    }
+  }
+
+  // ── Appendix A: Generated UI Screens ───────────────────────────────────────
+  const screens = data.ui_code?.screens ?? [];
+  if (screens.length) {
+    C.push(dxHeading("Appendix A. Generated UI Screens", 1),
+      dxPara("The platform generated the following screens as standalone HTML + Tailwind CSS pages."));
+    const rows: DxCell[][] = screens.map((sc: any) => [
+      txt(sc.id ?? sc.name ?? ""), txt(sc.route ?? ""), txt(sc.description ?? ""),
+    ]);
+    C.push(dxTable(["Screen", "Route", "Description"], [22, 26, 52], rows));
+  }
+
+  const doc = new Document({
+    sections: [{
+      properties: {},
+      headers: {
+        default: new Header({
+          children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${projectName} — SRS`, size: 16, color: DX_GREY })] })],
+        }),
+      },
+      footers: {
+        default: new Footer({
+          children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "Page ", size: 16, color: DX_GREY }), new TextRun({ children: [PageNumber.CURRENT], size: 16, color: DX_GREY })] })],
+        }),
+      },
+      children: C,
+    }],
+  });
   return Packer.toBuffer(doc);
 }
 
@@ -698,7 +395,14 @@ function latexLongTable(colspec: string, headers: string[], rows: string[][], ca
  * chapters with navy/blue headings and colour-headed tables. Compile with
  * pdflatex (run twice for the table of contents).
  */
-export function generateLaTeX(projectName: string, artifacts: any[], meta?: ExportMeta): string {
+export function generateLaTeX(
+  projectName: string,
+  artifacts: any[],
+  meta?: ExportMeta,
+  // Maps a UML diagram id → the PNG filename written alongside the .tex, so the
+  // compiled PDF embeds the rendered diagram instead of raw Mermaid source.
+  diagramImages?: Record<string, string>
+): string {
   const data = flattenArtifacts(artifacts);
   const e = latexEsc;
   const date = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
@@ -732,6 +436,8 @@ export function generateLaTeX(projectName: string, artifacts: any[], meta?: Expo
     "\\usepackage{ragged2e}",
     "\\usepackage{enumitem}",
     "\\usepackage{caption}",
+    "\\usepackage{graphicx}",
+    "\\usepackage{float}",
     "\\usepackage{titlesec}",
     "\\usepackage{fancyhdr}",
     "",
@@ -970,9 +676,22 @@ export function generateLaTeX(projectName: string, artifacts: any[], meta?: Expo
     for (const d of diagrams) {
       L.push(`\\section{${e(d.title ?? "Diagram")}}`);
       if (d.description) L.push("\\justifying", e(d.description), "");
-      L.push("The diagram is expressed in Mermaid syntax:", "", "\\begin{verbatim}");
-      for (const ml of String(d.mermaid ?? "").split("\n")) L.push(ml);
-      L.push("\\end{verbatim}", "");
+      const img = d.id ? diagramImages?.[d.id] : undefined;
+      if (img) {
+        // Rendered diagram (PNG) embedded as a figure; width capped to the text block.
+        L.push(
+          "\\begin{figure}[H]",
+          "\\centering",
+          `\\includegraphics[width=\\linewidth,height=0.7\\textheight,keepaspectratio]{${img}}`,
+          `\\caption{${e(d.title ?? "Diagram")}}`,
+          "\\end{figure}",
+          ""
+        );
+      } else {
+        L.push("The diagram is expressed in Mermaid syntax:", "", "\\begin{verbatim}");
+        for (const ml of String(d.mermaid ?? "").split("\n")) L.push(ml);
+        L.push("\\end{verbatim}", "");
+      }
     }
   }
 
@@ -992,6 +711,140 @@ export function generateLaTeX(projectName: string, artifacts: any[], meta?: Expo
 
   L.push("\\end{document}");
   return L.join("\n");
+}
+
+// ─── LaTeX → PDF compilation ───────────────────────────────────────────────────
+
+// Tectonic is a self-contained TeX engine: a single binary that fetches and
+// caches the packages our preamble needs on first run. The binary path can be
+// overridden with TECTONIC_PATH (the Docker image puts it on PATH as `tectonic`).
+const TECTONIC_BIN = process.env.TECTONIC_PATH || "tectonic";
+
+/**
+ * Compiles the SRS to a print-quality PDF by rendering {@link generateLaTeX} with
+ * Tectonic. UML diagram SVGs (captured client-side) are rasterised to PNG and
+ * embedded as figures. Runs in a throwaway temp dir that is always cleaned up.
+ *
+ * Tectonic resolves the table of contents in a single invocation (no double
+ * pass) and prints to stderr; a non-zero exit surfaces the TeX log to the caller.
+ */
+export async function compileLaTeX(
+  projectName: string,
+  artifacts: any[],
+  meta?: ExportMeta,
+  diagramSvgs?: Record<string, string>
+): Promise<Buffer> {
+  const workdir = await fs.mkdtemp(path.join(os.tmpdir(), "req2ui-tex-"));
+  try {
+    // Rasterise each diagram SVG to a PNG in the work dir, keyed back to its id.
+    const diagramImages: Record<string, string> = {};
+    if (diagramSvgs) {
+      let i = 0;
+      for (const [id, svg] of Object.entries(diagramSvgs)) {
+        if (!svg) continue;
+        const file = `diagram_${i++}.png`;
+        try {
+          await fs.writeFile(path.join(workdir, file), await svgToPng(svg));
+          diagramImages[id] = file;
+        } catch {
+          // A single bad SVG falls back to its Mermaid source in the PDF.
+        }
+      }
+    }
+
+    const tex = generateLaTeX(projectName, artifacts, meta, diagramImages);
+    await fs.writeFile(path.join(workdir, "main.tex"), tex, "utf8");
+
+    try {
+      await execFileAsync(
+        TECTONIC_BIN,
+        ["main.tex", "--outdir", workdir, "--chatter", "minimal"],
+        { cwd: workdir, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }
+      );
+    } catch (err: any) {
+      const detail = err?.stderr || err?.message || String(err);
+      throw new Error(`LaTeX compilation failed: ${detail}`);
+    }
+
+    return fs.readFile(path.join(workdir, "main.pdf"));
+  } finally {
+    await fs.rm(workdir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+// ─── LaTeX → Overleaf-ready ZIP bundle ─────────────────────────────────────────
+
+/** Short, file-system-safe slug for the bundle's root folder and file names. */
+function safeSlug(name: string): string {
+  return (name || "project").replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase() || "project";
+}
+
+const OVERLEAF_README = (slug: string) =>
+  `Req2UI — LaTeX source bundle
+============================
+
+This archive contains the full LaTeX source for your Software Requirements
+Specification, plus the rendered UML diagrams as figures, ready to compile.
+
+Contents
+--------
+  main.tex        The complete SRS document (IEEE 830, thesis-styled).
+  figures/        Rendered UML diagrams (PNG) referenced by main.tex.
+
+Compiling on Overleaf
+---------------------
+  1. Go to https://www.overleaf.com and choose "New Project" > "Upload Project".
+  2. Upload this entire .zip file (do NOT unzip it first — Overleaf unpacks it).
+  3. Open main.tex and set the compiler to "pdfLaTeX"
+     (Menu > Settings > Compiler), then press "Recompile".
+
+Compiling locally
+-----------------
+  pdflatex main.tex   (run twice so the table of contents resolves)
+  — or —
+  tectonic main.tex
+
+Generated by Req2UI (${slug}).
+`;
+
+/**
+ * Builds an Overleaf-ready .zip containing the SRS LaTeX source ({@link generateLaTeX})
+ * plus the rendered UML diagrams as PNG figures under figures/, so the user can
+ * upload it straight to Overleaf and compile to PDF without any missing-image
+ * errors. UML SVGs (captured client-side) are rasterised to PNG here; diagrams
+ * without an image gracefully fall back to their Mermaid source in the document.
+ */
+export async function generateLaTeXZip(
+  projectName: string,
+  artifacts: any[],
+  meta?: ExportMeta,
+  diagramSvgs?: Record<string, string>
+): Promise<Buffer> {
+  const zip = new JSZip();
+
+  // Rasterise each diagram SVG to a PNG under figures/, keyed back to its id so
+  // generateLaTeX can emit \includegraphics{figures/diagram_N.png}.
+  const diagramImages: Record<string, string> = {};
+  if (diagramSvgs) {
+    let i = 0;
+    for (const [id, svg] of Object.entries(diagramSvgs)) {
+      if (!svg) continue;
+      const rel = `figures/diagram_${i++}.png`;
+      try {
+        zip.file(rel, await svgToPng(svg));
+        diagramImages[id] = rel;
+      } catch {
+        // A single bad SVG falls back to its Mermaid source in the document.
+      }
+    }
+  }
+
+  const tex = generateLaTeX(projectName, artifacts, meta, diagramImages);
+  const slug = safeSlug(projectName);
+  zip.file("main.tex", tex);
+  zip.file("README.txt", OVERLEAF_README(slug));
+
+  return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }
 
 // ─── CSV ─────────────────────────────────────────────────────────────────────
