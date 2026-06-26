@@ -27,7 +27,9 @@ app.use(cors({
   origin: env.FRONTEND_URL,
   credentials: true,
 }));
-app.use(express.json());
+// Export POSTs carry client-captured Mermaid SVGs (6-8 diagrams as strings),
+// which easily exceed the default 100kb body limit and 413 the request.
+app.use(express.json({ limit: "25mb" }));
 app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
