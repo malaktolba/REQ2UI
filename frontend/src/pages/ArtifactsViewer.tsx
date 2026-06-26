@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode, type CSSProperties } from "react";
 import { useParams, Link } from "react-router-dom";
 import { fetchProject, fetchArtifacts } from "../api/projects";
 import type { Project, Artifact } from "../types/project";
@@ -6,7 +6,6 @@ import api from "../api/axios";
 import { CheckIcon, ArrowRight, ChevronDown, ArrowLeft } from "../components/Icons";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { UIRefinementPanel } from "../components/UIRefinementPanel";
-import { QualityReport } from "../components/QualityReport";
 import { useToast } from "../context/ToastContext";
 import { LoadingScreen } from "../components/LoadingScreen";
 
@@ -24,7 +23,6 @@ const TABS = [
   { key: "ui_code",                   label: "UI Code",           short: "UI"  },
   { key: "uml_diagrams",             label: "Diagrams",          short: "UML" },
   { key: "traceability_matrix",       label: "Traceability",      short: "TM"  },
-  { key: "quality_report",            label: "Quality",           short: "QA"  },
 ] as const;
 
 type TabKey = typeof TABS[number]["key"];
@@ -286,157 +284,332 @@ function STCView({ data }: { data: any }) {
 }
 
 // ─── Visual wireframe helpers ────────────────────────────────────────────────
+// The wireframes are reverse-engineered from the generated UI, so they render as
+// a low-fidelity DESKTOP browser mockup (the app is a web app) and tint to the
+// generation's brand accent when one is available — making the blueprint read as
+// a faithful preview of the real screen rather than a generic sketch.
 
-function WireframeShape({ c }: { c: any }) {
-  const t = (c.type ?? "").toLowerCase();
-
-  if (/navbar|header|app.?bar|navigation.?bar|top.?bar/.test(t))
-    return (
-      <div className="w-full h-8 bg-slate-700 flex items-center px-2 gap-1.5 flex-shrink-0">
-        <div className="w-2 h-2 bg-indigo-500/70 rounded-sm" />
-        <div className="h-1.5 bg-slate-500 rounded flex-1 max-w-[50%]" />
-        <div className="w-5 h-5 bg-slate-600 rounded-full ml-auto" />
-      </div>
-    );
-
-  if (/search/.test(t))
-    return (
-      <div className="mx-2 h-6 bg-slate-700 rounded-full flex items-center px-2 gap-1.5 flex-shrink-0">
-        <svg width="10" height="10" viewBox="0 0 10 10" className="text-slate-500 flex-shrink-0"><circle cx="4" cy="4" r="3" stroke="currentColor" strokeWidth="1.5" fill="none"/><line x1="7" y1="7" x2="9.5" y2="9.5" stroke="currentColor" strokeWidth="1.5"/></svg>
-        <div className="h-1.5 bg-slate-600 rounded flex-1" />
-      </div>
-    );
-
-  if (/button|cta|submit|action/.test(t))
-    return (
-      <div className="mx-2 flex-shrink-0">
-        <div className="h-7 bg-indigo-600/60 rounded-full flex items-center justify-center px-4">
-          <div className="h-1.5 bg-indigo-300/80 rounded w-14" />
-        </div>
-      </div>
-    );
-
-  if (/input|text.?field|form.?field|email|password|text.?input|field/.test(t))
-    return (
-      <div className="mx-2 h-7 border border-slate-600 rounded-md bg-slate-800/60 flex items-center px-2 flex-shrink-0">
-        <div className="h-1.5 bg-slate-600 rounded w-2/3" />
-        <div className="w-1 h-4 bg-slate-500 ml-1 opacity-60 animate-pulse" />
-      </div>
-    );
-
-  if (/image|avatar|banner|photo|picture|thumbnail/.test(t))
-    return (
-      <div className="mx-2 h-14 bg-slate-700 rounded-md flex items-center justify-center flex-shrink-0">
-        <svg width="20" height="20" viewBox="0 0 20 20" className="text-slate-500"><rect x="2" y="2" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/><path d="M2 13l4-4 3 3 3-3 6 6" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
-      </div>
-    );
-
-  if (/card|post.?card|product.?card|item.?card/.test(t))
-    return (
-      <div className="mx-2 border border-slate-600 rounded-md p-2 flex-shrink-0">
-        <div className="h-1.5 bg-slate-400 rounded w-3/4 mb-1.5" />
-        <div className="h-1 bg-slate-700 rounded mb-1" />
-        <div className="h-1 bg-slate-700 rounded w-5/6" />
-      </div>
-    );
-
-  if (/list|feed|table|data.?table|grid/.test(t))
-    return (
-      <div className="mx-2 flex-shrink-0 rounded-md overflow-hidden border border-slate-700">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className={`h-5 flex items-center px-2 gap-2 ${i % 2 === 0 ? "bg-slate-800" : "bg-slate-800/40"}`}>
-            <div className="w-2 h-2 bg-slate-600 rounded-sm flex-shrink-0" />
-            <div className="h-1 bg-slate-600 rounded flex-1" />
-            <div className="h-1 bg-slate-700 rounded w-8" />
-          </div>
-        ))}
-      </div>
-    );
-
-  if (/tab.?bar|bottom.?nav|bottom.?navigation|footer/.test(t))
-    return (
-      <div className="w-full h-9 bg-slate-800 border-t border-slate-700 flex items-center justify-around px-4 mt-auto flex-shrink-0">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="flex flex-col items-center gap-0.5">
-            <div className={`w-3.5 h-3.5 rounded-sm ${i === 0 ? "bg-indigo-500" : "bg-slate-600"}`} />
-            <div className="h-1 w-5 bg-slate-700 rounded" />
-          </div>
-        ))}
-      </div>
-    );
-
-  if (/heading|title/.test(t))
-    return (
-      <div className="mx-2 flex-shrink-0">
-        <div className="h-3 bg-slate-300/60 rounded w-2/3 mb-1" />
-      </div>
-    );
-
-  if (/text|label|paragraph|description/.test(t))
-    return (
-      <div className="mx-2 flex-shrink-0 space-y-1">
-        <div className="h-1.5 bg-slate-600 rounded" />
-        <div className="h-1.5 bg-slate-600 rounded w-5/6" />
-        <div className="h-1.5 bg-slate-700 rounded w-3/4" />
-      </div>
-    );
-
-  if (/icon|badge/.test(t))
-    return (
-      <div className="mx-2 w-7 h-7 bg-slate-700 rounded-lg flex-shrink-0 flex items-center justify-center">
-        <div className="w-3 h-3 bg-slate-500 rounded-sm" />
-      </div>
-    );
-
-  if (/notification|alert|banner/.test(t))
-    return (
-      <div className="mx-2 h-8 bg-indigo-900/60 border border-indigo-700/50 rounded-md flex items-center px-2 gap-1.5 flex-shrink-0">
-        <div className="w-2 h-2 bg-indigo-400 rounded-full flex-shrink-0" />
-        <div className="h-1.5 bg-indigo-600/80 rounded flex-1" />
-      </div>
-    );
-
-  // default — generic labeled block
-  return (
-    <div className="mx-2 h-7 border border-dashed border-slate-700 rounded-md flex items-center px-2 gap-1.5 flex-shrink-0">
-      <div className="h-1.5 bg-slate-600 rounded flex-1" />
-      <span className="text-[8px] text-slate-600 font-mono flex-shrink-0 uppercase">{(c.type ?? "").slice(0, 8)}</span>
-    </div>
-  );
+/** Append an alpha byte to a #rrggbb hex (alpha 0..1). */
+function hexAlpha(hex: string, alpha: number): string {
+  const a = Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, "0");
+  return `${hex}${a}`;
 }
 
-function PhoneMockup({ components }: { components: any[] }) {
-  return (
-    <div className="relative flex-shrink-0" style={{ width: 200, height: 390 }}>
-      {/* phone shell */}
-      <div className="absolute inset-0 rounded-[30px] border-[5px] border-slate-600 bg-slate-900 overflow-hidden shadow-2xl shadow-black/60">
-        {/* status bar */}
-        <div className="h-5 bg-slate-800/80 flex items-center justify-between px-3 flex-shrink-0">
-          <div className="flex gap-1">
-            <div className="w-1 h-1 bg-slate-500 rounded-full" />
-            <div className="w-1 h-1 bg-slate-500 rounded-full" />
-            <div className="w-1 h-1 bg-slate-500 rounded-full" />
+/** Accent fill style, or undefined to fall back to the element's `indigo` class. */
+function accentBg(accent: string | undefined, alpha = 1): CSSProperties | undefined {
+  return accent ? { backgroundColor: hexAlpha(accent, alpha) } : undefined;
+}
+
+type BlockProps = { c: any; accent?: string };
+
+// A faint neutral bar — the wireframe's "ink". Reused everywhere for text/labels.
+function Bar({ w = "full", h = 1.5, tone = "600" }: { w?: string; h?: number; tone?: string }) {
+  const width = w === "full" ? "100%" : w;
+  return <div className={`bg-slate-${tone} rounded`} style={{ height: h * 4, width }} />;
+}
+
+function WireframeBlock({ c, accent }: BlockProps) {
+  const t = normalize(c.type);
+  const label: string = (c.label ?? "").trim();
+
+  // Small caption shown above structural sections, derived from the real screen.
+  const caption = label ? (
+    <div className="text-[9px] uppercase tracking-wide text-slate-500 light:text-slate-400 font-semibold mb-1 truncate">{label}</div>
+  ) : null;
+
+  switch (t) {
+    case "navbar":
+      return (
+        <div className="-mx-3 -mt-3 mb-1 h-10 bg-slate-800 light:bg-slate-200/70 border-b border-slate-700 light:border-slate-300 flex items-center px-3 gap-2">
+          <div className="w-4 h-4 rounded bg-indigo-500" style={accentBg(accent)} />
+          <div className="h-2 w-16 bg-slate-600 rounded hidden sm:block" />
+          <div className="ml-auto flex items-center gap-3">
+            {[0, 1, 2].map((i) => <div key={i} className="h-1.5 w-8 bg-slate-600 rounded hidden sm:block" />)}
+            <div className="w-6 h-6 rounded-full bg-slate-600" />
           </div>
-          <div className="w-8 h-2 bg-slate-700 rounded-sm" />
         </div>
-        {/* content area */}
-        <div className="flex flex-col gap-1.5 py-1.5 overflow-hidden" style={{ height: "calc(100% - 20px)" }}>
-          {components.map((c, i) => <WireframeShape key={i} c={c} />)}
+      );
+
+    case "footer":
+      return (
+        <div className="-mx-3 -mb-3 mt-1 bg-slate-800/70 light:bg-slate-200/60 border-t border-slate-700 light:border-slate-300 px-3 py-3 flex justify-between">
+          {[0, 1, 2, 3].map((col) => (
+            <div key={col} className="space-y-1.5">
+              <div className="h-1.5 w-10 bg-slate-600 rounded" />
+              {[0, 1].map((r) => <div key={r} className="h-1 w-8 bg-slate-700 rounded" />)}
+            </div>
+          ))}
+        </div>
+      );
+
+    case "hero":
+      return (
+        <div
+          className="rounded-lg px-6 py-7 flex flex-col items-center text-center gap-2.5 border border-slate-700/50 light:border-slate-200"
+          style={accentBg(accent, 0.1) ?? { backgroundColor: "rgba(99,102,241,0.12)" }}
+        >
+          <div className="h-3.5 w-1/2 bg-slate-300 light:bg-slate-500 rounded" />
+          <div className="h-3.5 w-2/5 bg-slate-400 light:bg-slate-400 rounded" />
+          <div className="h-1.5 w-2/3 bg-slate-600 rounded mt-1" />
+          <div className="h-1.5 w-1/2 bg-slate-600 rounded" />
+          <div className="h-7 w-28 rounded-full bg-indigo-600 mt-2" style={accentBg(accent)} />
+        </div>
+      );
+
+    case "heading":
+      return <div className="py-0.5"><div className="h-3 w-2/5 bg-slate-300 light:bg-slate-500 rounded" /></div>;
+
+    case "text":
+      return (
+        <div className="space-y-1.5 py-0.5">
+          <Bar /><Bar w="92%" /><Bar w="80%" tone="700" />
+        </div>
+      );
+
+    case "search":
+      return (
+        <div className="h-8 max-w-sm bg-slate-800/70 light:bg-slate-100 border border-slate-700 light:border-slate-300 rounded-full flex items-center px-3 gap-2">
+          <svg width="11" height="11" viewBox="0 0 10 10" className="text-slate-500 flex-shrink-0"><circle cx="4" cy="4" r="3" stroke="currentColor" strokeWidth="1.5" fill="none"/><line x1="7" y1="7" x2="9.5" y2="9.5" stroke="currentColor" strokeWidth="1.5"/></svg>
+          <div className="h-1.5 bg-slate-600 rounded flex-1" />
+        </div>
+      );
+
+    case "button":
+      return <div className="h-8 w-32 rounded-lg bg-indigo-600 flex items-center justify-center" style={accentBg(accent)}><div className="h-1.5 w-16 rounded bg-white/70" /></div>;
+
+    case "badge":
+      return (
+        <div className="flex gap-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-5 w-14 rounded-full border border-slate-700 light:border-slate-300 flex items-center justify-center" style={i === 0 ? accentBg(accent, 0.18) : undefined}>
+              <div className="h-1 w-8 bg-slate-500 rounded" />
+            </div>
+          ))}
+        </div>
+      );
+
+    case "input":
+      return (
+        <div className="space-y-1.5 max-w-md">
+          <div className="h-1.5 w-20 bg-slate-600 rounded" />
+          <div className="h-8 border border-slate-700 light:border-slate-300 rounded-md bg-slate-800/40 light:bg-slate-100 flex items-center px-2"><div className="h-1.5 w-1/2 bg-slate-600 rounded" /></div>
+        </div>
+      );
+
+    case "form":
+      return (
+        <div className="max-w-md border border-slate-700 light:border-slate-200 rounded-lg p-4 space-y-3 bg-slate-800/30 light:bg-white">
+          {caption}
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="space-y-1.5">
+              <div className="h-1.5 w-16 bg-slate-600 rounded" />
+              <div className="h-7 border border-slate-700 light:border-slate-300 rounded-md bg-slate-900/40 light:bg-slate-50" />
+            </div>
+          ))}
+          <div className="h-8 w-28 rounded-lg bg-indigo-600 mt-1" style={accentBg(accent)} />
+        </div>
+      );
+
+    case "stat":
+    case "stats_row": {
+      const n = t === "stat" ? 1 : 4;
+      return (
+        <div>
+          {caption}
+          <div className={`grid gap-3 ${n === 1 ? "max-w-[180px]" : "grid-cols-2 md:grid-cols-4"}`}>
+            {Array.from({ length: n }).map((_, i) => (
+              <div key={i} className="border border-slate-700/70 light:border-slate-200 rounded-lg p-3 bg-slate-800/30 light:bg-white space-y-2">
+                <div className="h-1.5 w-10 bg-slate-600 rounded" />
+                <div className="h-4 w-14 rounded bg-indigo-500" style={accentBg(accent)} />
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    case "card":
+      return (
+        <div className="border border-slate-700/70 light:border-slate-200 rounded-lg p-3 bg-slate-800/30 light:bg-white max-w-sm space-y-2">
+          <div className="h-16 rounded-md bg-slate-700/60 light:bg-slate-100" />
+          <div className="h-2 w-3/4 bg-slate-500 rounded" />
+          <Bar w="90%" tone="700" /><Bar w="70%" tone="700" />
+        </div>
+      );
+
+    case "card_grid":
+      return (
+        <div>
+          {caption}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="border border-slate-700/70 light:border-slate-200 rounded-lg p-2.5 bg-slate-800/30 light:bg-white space-y-2">
+                <div className="h-14 rounded-md bg-slate-700/60 light:bg-slate-100" />
+                <div className="h-1.5 w-3/4 bg-slate-500 rounded" />
+                <div className="h-1 w-1/2 bg-slate-700 rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+
+    case "list":
+      return (
+        <div className="border border-slate-700 light:border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-800 light:divide-slate-100">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-9 flex items-center gap-3 px-3 bg-slate-800/20 light:bg-white">
+              <div className="w-6 h-6 rounded-full bg-slate-700 light:bg-slate-200 flex-shrink-0" />
+              <div className="flex-1 space-y-1"><div className="h-1.5 w-1/3 bg-slate-500 rounded" /><div className="h-1 w-1/2 bg-slate-700 rounded" /></div>
+              <div className="h-5 w-12 rounded-full bg-slate-700/60 light:bg-slate-100" />
+            </div>
+          ))}
+        </div>
+      );
+
+    case "table":
+      return (
+        <div>
+          {caption}
+          <div className="border border-slate-700 light:border-slate-200 rounded-lg overflow-hidden">
+            <div className="h-8 flex items-center gap-4 px-3" style={accentBg(accent, 0.14) ?? { backgroundColor: "rgba(99,102,241,0.14)" }}>
+              {[24, 20, 16, 12].map((w, i) => <div key={i} className="h-1.5 bg-slate-500 rounded" style={{ width: w * 4 }} />)}
+            </div>
+            {Array.from({ length: 4 }).map((_, r) => (
+              <div key={r} className={`h-8 flex items-center gap-4 px-3 ${r % 2 ? "bg-slate-800/20 light:bg-slate-50" : "bg-transparent"}`}>
+                {[24, 20, 16, 12].map((w, i) => <div key={i} className="h-1.5 bg-slate-700 rounded" style={{ width: w * 4 }} />)}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+
+    case "sidebar":
+      return (
+        <div className="flex gap-3 min-h-[120px]">
+          <div className="w-28 flex-shrink-0 border border-slate-700/70 light:border-slate-200 rounded-lg p-2.5 space-y-2 bg-slate-800/30 light:bg-white">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-6 rounded flex items-center px-2" style={i === 0 ? (accentBg(accent, 0.18) ?? { backgroundColor: "rgba(99,102,241,0.18)" }) : undefined}>
+                <div className="h-1.5 w-full bg-slate-600 rounded" />
+              </div>
+            ))}
+          </div>
+          <div className="flex-1 space-y-2">
+            <div className="h-2.5 w-1/3 bg-slate-500 rounded" />
+            <Bar /><Bar w="90%" />
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <div className="h-14 rounded-md bg-slate-700/40 light:bg-slate-100" />
+              <div className="h-14 rounded-md bg-slate-700/40 light:bg-slate-100" />
+            </div>
+          </div>
+        </div>
+      );
+
+    case "chart":
+      return (
+        <div className="border border-slate-700/70 light:border-slate-200 rounded-lg p-4 bg-slate-800/30 light:bg-white">
+          {caption}
+          <div className="flex items-end gap-2 h-24">
+            {[40, 65, 50, 80, 60, 95, 70].map((h, i) => (
+              <div key={i} className="flex-1 rounded-t bg-indigo-500" style={{ height: `${h}%`, ...(accentBg(accent, 0.55 + (i % 3) * 0.15) ?? {}) }} />
+            ))}
+          </div>
+        </div>
+      );
+
+    case "tabs":
+      return (
+        <div className="border-b border-slate-700 light:border-slate-200 flex gap-5 pb-0">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="pb-2 relative">
+              <div className="h-1.5 w-12 bg-slate-500 rounded" />
+              {i === 0 && <div className="absolute -bottom-px left-0 right-0 h-0.5 bg-indigo-500 rounded-full" style={accentBg(accent)} />}
+            </div>
+          ))}
+        </div>
+      );
+
+    case "image":
+      return (
+        <div className="h-28 max-w-md rounded-lg bg-slate-700/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-200 flex items-center justify-center">
+          <svg width="28" height="28" viewBox="0 0 20 20" className="text-slate-500"><rect x="2" y="2" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.2" fill="none"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/><path d="M2 13l4-4 3 3 3-3 6 6" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>
+        </div>
+      );
+
+    default:
+      return (
+        <div className="border border-dashed border-slate-700 light:border-slate-300 rounded-md px-3 py-2 flex items-center gap-2">
+          <div className="h-1.5 bg-slate-600 rounded flex-1" />
+          <span className="text-[8px] text-slate-600 font-mono uppercase flex-shrink-0">{(c.type ?? "").slice(0, 10)}</span>
+        </div>
+      );
+  }
+
+  // Maps a free-form component type onto the drawable block vocabulary.
+  function normalize(raw: string): string {
+    const s = (raw ?? "").toLowerCase().replace(/[\s_-]+/g, "");
+    const rules: [RegExp, string][] = [
+      [/nav|header|topbar|appbar|menubar/, "navbar"],
+      [/footer/, "footer"],
+      [/hero|jumbotron|banner|masthead/, "hero"],
+      [/statsrow|kpis|metrics/, "stats_row"],
+      [/stat|kpi|metric/, "stat"],
+      [/cardgrid|cards|grid|gallery|tiles/, "card_grid"],
+      [/table|datagrid|datatable/, "table"],
+      [/list|feed|timeline|rows/, "list"],
+      [/sidebar|aside|drawer|filterspanel/, "sidebar"],
+      [/chart|graph|plot|analytics/, "chart"],
+      [/form|fieldset/, "form"],
+      [/search/, "search"],
+      [/input|textfield|select|textarea|field|email|password/, "input"],
+      [/button|cta|submit|action/, "button"],
+      [/tab/, "tabs"],
+      [/badge|tag|pill|chip|status/, "badge"],
+      [/heading|title/, "heading"],
+      [/image|img|photo|avatar|picture|thumbnail|illustration/, "image"],
+      [/text|label|paragraph|description|copy/, "text"],
+      [/card|panel|tile/, "card"],
+    ];
+    for (const [re, type] of rules) if (re.test(s)) return type;
+    return "default";
+  }
+}
+
+function BrowserMockup({ screen, accent }: { screen: any; accent?: string }) {
+  const components: any[] = screen.components ?? [];
+  return (
+    <div className="w-full rounded-xl border border-slate-700 light:border-slate-200 bg-slate-950 light:bg-white overflow-hidden shadow-xl shadow-black/30">
+      {/* browser chrome */}
+      <div className="h-9 bg-slate-800 light:bg-slate-100 border-b border-slate-700 light:border-slate-200 flex items-center px-3 gap-2">
+        <div className="flex gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-red-400/70" />
+          <div className="w-2.5 h-2.5 rounded-full bg-amber-400/70" />
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400/70" />
+        </div>
+        <div className="ml-3 flex-1 max-w-md h-5 rounded-md bg-slate-900/60 light:bg-white border border-slate-700/60 light:border-slate-200 flex items-center px-2 gap-1.5">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" className="text-slate-500 flex-shrink-0"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="2"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="2"/></svg>
+          <span className="text-[9px] text-slate-500 font-mono truncate">{screen.route || "/"}</span>
         </div>
       </div>
-      {/* side button */}
-      <div className="absolute -right-[5px] top-20 w-[4px] h-10 bg-slate-600 rounded-r-sm" />
-      <div className="absolute -left-[5px] top-16 w-[4px] h-7 bg-slate-600 rounded-l-sm" />
-      <div className="absolute -left-[5px] top-[100px] w-[4px] h-7 bg-slate-600 rounded-l-sm" />
-      {/* home indicator */}
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-12 h-1 bg-slate-600 rounded-full" />
+      {/* page content */}
+      <div className="flex flex-col gap-3 p-3 min-h-[260px]">
+        {components.length
+          ? components.map((c, i) => <WireframeBlock key={i} c={c} accent={accent} />)
+          : <div className="text-xs text-slate-600 m-auto">No components described</div>}
+      </div>
     </div>
   );
 }
 
 function WireframesView({ data }: { data: any }) {
+  const accent: string | undefined = typeof data.accent === "string" ? data.accent : undefined;
   return (
     <div className="space-y-8">
+      {data.derived_from_ui && (
+        <div className="flex items-center gap-2 text-xs text-slate-400 light:text-slate-500 bg-slate-900/60 light:bg-slate-50 border border-slate-800 light:border-slate-200 rounded-lg px-3 py-2">
+          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-indigo-500" style={accentBg(accent)} />
+          Wireframes refined to match the generated UI — each blueprint mirrors the layout of the screen that was actually built.
+        </div>
+      )}
       {data.screens?.map((sc: any) => (
         <div key={sc.id} className="bg-slate-900 light:bg-white border border-slate-800 light:border-slate-200 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-5 flex-wrap">
@@ -445,10 +618,10 @@ function WireframesView({ data }: { data: any }) {
             {sc.route && <span className="text-xs text-slate-500 font-mono bg-slate-800 light:bg-slate-100 light:text-slate-600 px-2 py-0.5 rounded">{sc.route}</span>}
           </div>
 
-          <div className="flex gap-8 flex-wrap">
-            <PhoneMockup components={sc.components ?? []} />
+          <div className="grid lg:grid-cols-[1.7fr_1fr] gap-6 items-start">
+            <BrowserMockup screen={sc} accent={accent} />
 
-            <div className="flex-1 min-w-[180px] space-y-4">
+            <div className="min-w-[180px] space-y-4">
               {sc.description && (
                 <p className="text-slate-400 text-sm leading-relaxed">{sc.description}</p>
               )}
@@ -1566,9 +1739,6 @@ export default function ArtifactsViewer() {
             const available =
               tab.key === "srs_document"
                 ? srsReady
-                : tab.key === "quality_report"
-                // The quality report can be run as soon as the core SRS exists.
-                ? srsReady
                 : tab.key === "ui_code"
                 // Enable once wireframes exist so the tab can be opened to
                 // generate UI code, even before any ui_code artifact exists.
@@ -1645,9 +1815,7 @@ export default function ArtifactsViewer() {
         )}
 
         {/* Content */}
-        {activeTab === "quality_report" ? (
-          <QualityReport projectId={id ?? ""} />
-        ) : (
+        {(
           !(activeTab === "ui_code" && !availableKeys.has("ui_code") && availableKeys.has("wireframes")) && (
             <ArtifactContent
               tabKey={activeTab}

@@ -105,7 +105,11 @@ async function upsertStage(
     ON CONFLICT (project_id, stage) DO UPDATE SET
       status = EXCLUDED.status,
       error = EXCLUDED.error,
-      started_at = COALESCE(pipeline_stages.started_at, EXCLUDED.started_at),
+      -- On a fresh run the "running" upsert carries a new started_at and should
+      -- reset the clock; the later "completed" upsert carries NULL and must keep
+      -- the run's real start. Preferring EXCLUDED-when-present does both, so a
+      -- re-generation times itself rather than spanning from the first-ever run.
+      started_at = COALESCE(EXCLUDED.started_at, pipeline_stages.started_at),
       finished_at = EXCLUDED.finished_at
   `;
 }
@@ -478,8 +482,11 @@ Rules:
 
     // The model picked the accent; code turns it into the deterministic `indigo`
     // remap (custom-colour preference still overrides). A short, model-written
-    // theme summary keeps every per-screen page on the same aesthetic.
-    const accentScript = accentConfigScript(resolveAccentHex(uiPreferences, designSystem.accent_hex));
+    // theme summary keeps every per-screen page on the same aesthetic. The
+    // resolved hex is also persisted on the artifact so the wireframe view can
+    // tint its mockups to match the generated UI's brand colour.
+    const accentHex = resolveAccentHex(uiPreferences, designSystem.accent_hex);
+    const accentScript = accentConfigScript(accentHex);
     const themeSummary: string =
       typeof designSystem.theme_summary === "string" && designSystem.theme_summary.trim()
         ? designSystem.theme_summary.trim()
@@ -631,6 +638,7 @@ System: ${s1.system_summary}`;
         footer: designSystem.footer,
         body_classes: designSystem.body_classes,
         components: kit,
+        accent: accentHex,
       },
       screens: generatedScreens,
       // Record any incomplete generation so the UI can tell the user some screens
@@ -654,6 +662,160 @@ System: ${s1.system_summary}`;
   }
 }
 
+// ── Wireframes ⟵ generated UI (post-Stage-10 alignment) ─────────────────────
+// The UI is generated creatively, free of the early low-fi wireframes. Once it
+// exists, we run the relationship the OTHER way: reverse-engineer the wireframes
+// from the finished UI so the "design" artifact actually mirrors what was built.
+// The UI stays unconstrained; the wireframes get pulled into alignment with it,
+// which makes them read as a faithful, higher-quality blueprint of the real app.
+
+// Controlled vocabulary the wireframe renderer knows how to draw. Constraining
+// the model to this list guarantees every derived block maps to a real shape.
+const WF_BLOCK_TYPES = [
+  "navbar", "hero", "heading", "text", "search", "button", "input", "form",
+  "stat", "stats_row", "card", "card_grid", "list", "table", "sidebar",
+  "chart", "image", "badge", "tabs", "footer",
+] as const;
+
+interface DerivedBlock { type: string; label: string; purpose?: string }
+
+// Loose synonym map → nearest known block, so a model that says "hero_section"
+// or "datatable" still lands on a drawable shape instead of the generic default.
+function normalizeBlockType(raw: string): string {
+  const t = raw.toLowerCase().replace(/[\s_-]+/g, "");
+  const known = new Set(WF_BLOCK_TYPES as readonly string[]);
+  if (known.has(raw.toLowerCase())) return raw.toLowerCase();
+  const aliases: [RegExp, string][] = [
+    [/nav|header|topbar|appbar|menu/, "navbar"],
+    [/hero|jumbotron|banner|masthead/, "hero"],
+    [/kpi|metric|stat(card)?$/, "stat"],
+    [/stats|kpis|metrics/, "stats_row"],
+    [/cardgrid|cards|grid|gallery|tiles/, "card_grid"],
+    [/datatable|table|datagrid/, "table"],
+    [/list|feed|rows|timeline/, "list"],
+    [/sidebar|aside|drawer|filters?panel/, "sidebar"],
+    [/chart|graph|plot|analytics/, "chart"],
+    [/form|fieldset/, "form"],
+    [/input|textfield|select|textarea/, "input"],
+    [/search/, "search"],
+    [/button|cta|action/, "button"],
+    [/heading|title|h1|h2/, "heading"],
+    [/text|paragraph|copy|description/, "text"],
+    [/image|img|photo|avatar|thumbnail|illustration/, "image"],
+    [/badge|tag|pill|chip|status/, "badge"],
+    [/tab/, "tabs"],
+    [/footer/, "footer"],
+    [/card|panel|tile/, "card"],
+  ];
+  for (const [re, type] of aliases) if (re.test(t)) return type;
+  return "card";
+}
+
+/**
+ * Reverse-engineers a low-fidelity wireframe block list from one finished UI
+ * page. The model reads the real HTML and reports the major visual sections
+ * top-to-bottom using the controlled vocabulary, so the wireframe mirrors the
+ * actual layout. Light model (cheap/fast); returns [] on any failure.
+ */
+async function deriveScreenBlocks(name: string, html: string): Promise<DerivedBlock[]> {
+  if (!html || html.length < 200) return [];
+  const system = `You translate a FINISHED HTML web page into a low-fidelity WIREFRAME — the structural blueprint a designer would have sketched before building it.
+
+Return JSON exactly: { "blocks": [ { "type": "...", "label": "short label", "purpose": "one short phrase" } ] }
+
+Rules:
+- "type" MUST be one of: ${WF_BLOCK_TYPES.join(", ")}.
+- List blocks in the SAME top-to-bottom order they visually appear on the page.
+- Start with "navbar" if the page has a top nav, and end with "footer" if it has one.
+- Collapse repeated elements into one structural block: a grid of cards is ONE "card_grid", a row of metric tiles is ONE "stats_row", a data table is ONE "table".
+- Use "hero" for a large prominent header/intro section, "form" for a group of inputs, "sidebar" for a side panel beside main content.
+- 6 to 12 blocks total — capture the real structure, not every element.
+- "label" is 2-4 words describing that section in this app's domain (e.g. "Revenue overview", "Recent orders"). No placeholders.`;
+  const user = `Screen: ${name}\n\nHTML (truncated):\n${html.slice(0, 12000)}`;
+  try {
+    const raw = await callGroq(system, user, 1500, GROQ_LIGHT);
+    const blocks = Array.isArray(raw?.blocks) ? raw.blocks : [];
+    return blocks
+      .filter((b: any) => b && typeof b.type === "string")
+      .map((b: any) => ({
+        type: normalizeBlockType(b.type),
+        label: String(b.label ?? "").trim().slice(0, 48),
+        purpose: b.purpose ? String(b.purpose).trim().slice(0, 120) : undefined,
+      }))
+      .slice(0, 14);
+  } catch (err: any) {
+    console.warn(`[wireframes] could not derive blocks for "${name}":`, err?.message);
+    return [];
+  }
+}
+
+/**
+ * After UI generation, rewrites the wireframes artifact so each screen's
+ * component list mirrors the structure of the actually-generated UI page.
+ * Original screen metadata (id/name/route/description/navigation) is preserved;
+ * only the component blocks are replaced. Screens with no generated counterpart
+ * borrow the layout of the same category (the UI dedups by category, so e.g.
+ * Login & Register share the one generated auth layout). Never throws and never
+ * blocks generation — on any failure the original wireframes are left intact.
+ */
+export async function deriveWireframesFromUI(
+  projectId: string,
+  opts: { force?: boolean } = {}
+): Promise<void> {
+  try {
+    const rows = await sql`
+      SELECT type, content FROM artifacts
+      WHERE project_id = ${projectId} AND type IN ('ui_code', 'wireframes')
+    ` as any[];
+    const byType = Object.fromEntries(rows.map((r: any) => [r.type, r.content]));
+    const ui = byType.ui_code;
+    const wf = byType.wireframes;
+    const uiScreens: any[] = Array.isArray(ui?.screens) ? ui.screens : [];
+    const wfScreens: any[] = Array.isArray(wf?.screens) ? wf.screens : [];
+    if (!uiScreens.length || !wfScreens.length) return;
+    // Already aligned to this UI — skip unless an explicit re-run forces it.
+    if (wf.derived_from_ui && !opts.force) return;
+
+    // Derive a block list per generated UI screen (parallel; light model).
+    const results = await Promise.allSettled(
+      uiScreens.map(async (s) => ({ s, blocks: await deriveScreenBlocks(s.name ?? s.id, s.html ?? "") }))
+    );
+    const byId = new Map<string, DerivedBlock[]>();
+    const byCategory = new Map<string, DerivedBlock[]>();
+    for (const r of results) {
+      if (r.status !== "fulfilled" || !r.value.blocks.length) continue;
+      byId.set(r.value.s.id, r.value.blocks);
+      const cat = screenCategory(r.value.s);
+      if (!byCategory.has(cat)) byCategory.set(cat, r.value.blocks);
+    }
+    if (!byId.size) return; // nothing usable derived → keep original wireframes
+
+    const accent = typeof ui?.design_system?.accent === "string" ? ui.design_system.accent : undefined;
+
+    const screens = wfScreens.map((sc) => {
+      const blocks = byId.get(sc.id) ?? byCategory.get(screenCategory(sc));
+      if (!blocks?.length) return sc; // no match → preserve original components
+      return {
+        ...sc,
+        components: blocks.map((b) => ({
+          type: b.type,
+          label: b.label || sc.name || sc.id,
+          ...(b.purpose ? { purpose: b.purpose } : {}),
+        })),
+      };
+    });
+
+    await upsertArtifact(projectId, "wireframes", {
+      ...wf,
+      screens,
+      derived_from_ui: true,
+      ...(accent ? { accent } : {}),
+    });
+  } catch (err: any) {
+    console.warn("[wireframes] UI-derived alignment failed, keeping original:", err?.message);
+  }
+}
+
 /** Re-runs only Stage 10 for a project that already has the prerequisite artifacts. */
 export async function regenerateUICode(projectId: string, userId: string, emit: Emit): Promise<void> {
   const projectRows = await sql`
@@ -674,6 +836,9 @@ export async function regenerateUICode(projectId: string, userId: string, emit: 
     projectId, projectRows[0].name, data.extraction, data.functional_requirements, data.wireframes,
     emit, undefined, projectRows[0].ui_preferences ?? undefined
   );
+
+  // The UI changed — re-align the wireframes to the freshly generated pages.
+  await deriveWireframesFromUI(projectId, { force: true });
 }
 
 export async function runPipeline(
@@ -823,7 +988,8 @@ Return a JSON object with this exact shape:
     }
   ]
 }
-Generate at least 2 test cases per functional requirement. Include positive and negative cases.`,
+Generate at least 2 test cases per functional requirement, covering positive, negative, and edge cases.
+Each "steps" entry must be a concrete action with realistic test data (not "step 1"). Each "expected_result" must be SPECIFIC and verifiable — state the exact output, message, or state change, never vague phrases like "works correctly". Always fill in "preconditions".`,
       `Project: ${projectName}
 Functional requirements:
 ${s2.requirements?.map((r: any) => `${r.id}: ${r.title} — ${r.description}`).join("\n")}`,
@@ -852,7 +1018,7 @@ Return a JSON object with this exact shape:
     }
   ]
 }
-Generate at least 1 test case per security requirement.`,
+Generate at least 1 test case per security requirement. Each test must map to a DISTINCT security requirement and a distinct attack vector — do NOT produce redundant or duplicate tests, and make sure the title, attack_vector, and expected_result agree. Each "expected_result" must state the specific secure behavior (the exact rejection, response, or safeguard); "steps" must be concrete actions.`,
       `Project: ${projectName}
 Security requirements:
 ${s4.requirements?.map((r: any) => `${r.id}: ${r.title} (${r.owasp_category})`).join("\n")}`,
@@ -991,6 +1157,12 @@ Return a JSON object with this exact shape (6–8 entries; ids UML-001, UML-002,
   ]
 }
 
+CONTENT REQUIREMENTS (accuracy matters as much as syntax — the diagrams must reflect THIS system):
+- Use-case diagram: include a use case for EACH major functional requirement below, connected to the actor(s) who perform it — NOT one generic action per actor.
+- Class diagram: include EVERY important domain entity the system manages (the core data/nouns in the requirements), each with its key attributes and the relationships between entities. Do not omit central entities.
+- Sequence diagram: model ONE core end-to-end business flow (the system's most important user story) with its real steps — NOT a generic login flow.
+- Ground everything in the specific requirements, actors, and entities provided; avoid generic placeholders.
+
 STRICT Mermaid syntax rules:
 1. use_case: flowchart TD; actors as ((Label)), use cases as [Label], arrows -->
 2. class: classDiagram; attributes "+name Type", methods "+method()", relations "ClassA --> ClassB : label"
@@ -1016,6 +1188,11 @@ ${s7.screens?.map((sc: any) => `${sc.name}${sc.description ? ` — ${sc.descript
       // Stage 10: UI Code Generation (multipass — needs S1, S2, S7)
       generateUICodeMultipass(projectId, projectName, s1, s2, s7, emit, cache.ui_code, opts.uiPreferences),
     ]);
+
+    // Post-generation: quietly pull the wireframes into alignment with the UI
+    // that was actually built, so the design artifact mirrors the real app.
+    // Never blocks completion — failures leave the original wireframes in place.
+    await deriveWireframesFromUI(projectId, { force: !!opts.force });
 
     await sql`UPDATE projects SET status = 'completed', updated_at = NOW() WHERE id = ${projectId}`;
   } catch (err) {

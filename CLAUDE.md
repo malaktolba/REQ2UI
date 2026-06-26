@@ -80,6 +80,8 @@ Pipeline is streamed to the frontend via **SSE** at `GET /api/projects/:id/gener
 
 Stage 10 uses two Gemini passes: (1) generate a shared design system (navbar, footer, Tailwind config), (2) generate HTML for each distinct screen category (auth, dashboard, settings, profile, create, list, report). `selectDistinctScreens()` deduplicates screens by category to avoid near-duplicate pages.
 
+**Wireframes ⟵ UI alignment.** The early Stage 7 wireframes don't constrain the (creatively generated) UI. Instead, *after* Stage 10 completes, `deriveWireframesFromUI()` runs the relationship in reverse: a light Groq model reverse-engineers each generated UI page's HTML into an ordered low-fidelity block list (controlled vocabulary: navbar/hero/stats_row/card_grid/table/sidebar/chart/form/…), then rewrites the `wireframes` artifact so each screen's components mirror the layout that was actually built (screen metadata is preserved; screens with no UI counterpart borrow their category's layout). The resolved brand accent is persisted on `ui_code.design_system.accent` and copied onto `wireframes.accent` for tinting. The step never throws and never blocks generation — on failure the original wireframes stay intact. The frontend renders wireframes as a desktop **browser mockup** (`BrowserMockup`/`WireframeBlock` in `ArtifactsViewer.tsx`) tinted to the accent.
+
 ### GEval Quality Evaluation
 
 After generation, an independent **GEval (LLM-as-a-Judge)** step grades artifact *quality* (separate from `metrics.service.ts`, which does rule-based conformance scoring). It does **not** generate or modify artifacts.
