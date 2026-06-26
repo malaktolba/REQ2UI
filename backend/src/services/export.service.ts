@@ -738,13 +738,35 @@ export function generateLaTeX(
 // Resolution order (so PDF export works whether or not the host ships Tectonic):
 //   1. TECTONIC_PATH, if set (e.g. the Docker image puts it on PATH as `tectonic`).
 //   2. `tectonic` already on PATH.
-//   3. Otherwise, on Linux, download the pinned static (musl) binary once into a
+//   3. Otherwise, download the pinned static binary for this OS/arch once into a
 //      cache dir and reuse it. This lets the plain Node host (Render web service,
-//      no Docker) produce PDFs without any infra changes.
+//      no Docker) produce PDFs without any infra changes — and makes local PDF
+//      export work on Windows/macOS dev machines too.
 const TECTONIC_VERSION = "0.16.9";
-const TECTONIC_URL =
-  process.env.TECTONIC_DOWNLOAD_URL ||
-  `https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-x86_64-unknown-linux-musl.tar.gz`;
+
+// Tectonic release asset + extracted binary name per `${platform}-${arch}`. The
+// Windows build ships as a .zip holding tectonic.exe; the others are .tar.gz
+// holding `tectonic`. `tar` (GNU tar on Linux, the bsdtar bundled with Windows
+// 10+/macOS) auto-detects both gzip and zip, so one extract command covers all.
+type TectonicTarget = { asset: string; binary: string };
+const TECTONIC_TARGETS: Record<string, TectonicTarget> = {
+  "linux-x64":    { asset: "x86_64-unknown-linux-musl.tar.gz", binary: "tectonic" },
+  "linux-arm64":  { asset: "aarch64-unknown-linux-musl.tar.gz", binary: "tectonic" },
+  "darwin-x64":   { asset: "x86_64-apple-darwin.tar.gz", binary: "tectonic" },
+  "darwin-arm64": { asset: "aarch64-apple-darwin.tar.gz", binary: "tectonic" },
+  "win32-x64":    { asset: "x86_64-pc-windows-msvc.zip", binary: "tectonic.exe" },
+};
+
+function tectonicTarget(): TectonicTarget | null {
+  return TECTONIC_TARGETS[`${process.platform}-${process.arch}`] ?? null;
+}
+
+function tectonicDownloadUrl(asset: string): string {
+  return (
+    process.env.TECTONIC_DOWNLOAD_URL ||
+    `https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-${asset}`
+  );
+}
 
 /** True if `bin --version` runs successfully. */
 async function tectonicWorks(bin: string): Promise<boolean> {
@@ -764,26 +786,30 @@ async function resolveTectonic(): Promise<string> {
   if (explicit && (await tectonicWorks(explicit))) return explicit;
   if (await tectonicWorks("tectonic")) return "tectonic";
 
-  // Self-bootstrap: only the linux-x86_64 build is fetched, so bail clearly
-  // elsewhere (e.g. local Windows/macOS dev) rather than downloading a dud.
-  if (process.platform !== "linux") {
+  // Self-bootstrap: download the matching static binary once and reuse it, so
+  // PDF export works on hosts without Tectonic — the Render Node web service
+  // (linux-x64) as well as local Windows/macOS dev machines.
+  const target = tectonicTarget();
+  if (!target) {
     throw new Error(
-      "tectonic not found and auto-download only supports linux-x64. Install Tectonic locally or set TECTONIC_PATH."
+      `tectonic not found and no auto-download build for ${process.platform}-${process.arch}. Install Tectonic locally or set TECTONIC_PATH.`
     );
   }
 
   const cacheDir = process.env.TECTONIC_CACHE_DIR || path.join(os.tmpdir(), "req2ui-tectonic");
-  const bin = path.join(cacheDir, "tectonic");
+  const bin = path.join(cacheDir, target.binary);
   if (await tectonicWorks(bin)) return bin;
 
   await fs.mkdir(cacheDir, { recursive: true });
-  const res = await fetch(TECTONIC_URL);
+  const res = await fetch(tectonicDownloadUrl(target.asset));
   if (!res.ok) throw new Error(`Tectonic download failed: HTTP ${res.status}`);
-  const tarPath = path.join(cacheDir, "tectonic.tar.gz");
-  await fs.writeFile(tarPath, Buffer.from(await res.arrayBuffer()));
-  await execFileAsync("tar", ["-xzf", tarPath, "-C", cacheDir]);
-  await fs.chmod(bin, 0o755);
-  await fs.rm(tarPath, { force: true }).catch(() => {});
+  // The archive (.tar.gz on unix, .zip on Windows) holds the binary at its root;
+  // tar auto-detects the compression, so the same extract works for both.
+  const archivePath = path.join(cacheDir, target.asset.endsWith(".zip") ? "tectonic.zip" : "tectonic.tar.gz");
+  await fs.writeFile(archivePath, Buffer.from(await res.arrayBuffer()));
+  await execFileAsync("tar", ["-xf", archivePath, "-C", cacheDir]);
+  if (process.platform !== "win32") await fs.chmod(bin, 0o755); // no-op on Windows
+  await fs.rm(archivePath, { force: true }).catch(() => {});
 
   if (!(await tectonicWorks(bin))) throw new Error("Tectonic downloaded but failed to run.");
   return bin;
