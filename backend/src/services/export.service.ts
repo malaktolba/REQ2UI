@@ -43,11 +43,28 @@ function flattenArtifacts(artifacts: any[]): Record<string, any> {
   return Object.fromEntries(artifacts.map((a: any) => [a.type, a.content]));
 }
 
+// Bundled fonts so SVG <text> renders on hosts with no system fonts (e.g. the
+// minimal Render Linux container, where loadSystemFonts finds nothing and the
+// Mermaid diagram labels come out blank). Lives at backend/assets/fonts — two
+// levels up from this file in both dev (src/services) and prod (dist/services).
+const FONT_DIR = path.join(__dirname, "..", "..", "assets", "fonts");
+const FONT_FILES = [
+  path.join(FONT_DIR, "DejaVuSans.ttf"),
+  path.join(FONT_DIR, "DejaVuSans-Bold.ttf"),
+];
+
 async function svgToPng(svg: string): Promise<Buffer> {
   const resvg = new Resvg(svg, {
     background: "white",
     fitTo: { mode: "width", value: 900 },
-    font: { loadSystemFonts: true },
+    // Load the bundled fonts and make DejaVu Sans the default so resvg
+    // substitutes it for the Mermaid-requested families ("trebuchet ms",
+    // verdana, …) it can't find — otherwise labels render wordless.
+    font: {
+      loadSystemFonts: true,
+      fontFiles: FONT_FILES,
+      defaultFontFamily: "DejaVu Sans",
+    },
   });
   const rendered = resvg.render();
   return Buffer.from(rendered.asPng());
