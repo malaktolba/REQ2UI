@@ -716,9 +716,72 @@ export function generateLaTeX(
 // ─── LaTeX → PDF compilation ───────────────────────────────────────────────────
 
 // Tectonic is a self-contained TeX engine: a single binary that fetches and
-// caches the packages our preamble needs on first run. The binary path can be
-// overridden with TECTONIC_PATH (the Docker image puts it on PATH as `tectonic`).
-const TECTONIC_BIN = process.env.TECTONIC_PATH || "tectonic";
+// caches the packages our preamble needs on first run.
+//
+// Resolution order (so PDF export works whether or not the host ships Tectonic):
+//   1. TECTONIC_PATH, if set (e.g. the Docker image puts it on PATH as `tectonic`).
+//   2. `tectonic` already on PATH.
+//   3. Otherwise, on Linux, download the pinned static (musl) binary once into a
+//      cache dir and reuse it. This lets the plain Node host (Render web service,
+//      no Docker) produce PDFs without any infra changes.
+const TECTONIC_VERSION = "0.16.9";
+const TECTONIC_URL =
+  process.env.TECTONIC_DOWNLOAD_URL ||
+  `https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-x86_64-unknown-linux-musl.tar.gz`;
+
+/** True if `bin --version` runs successfully. */
+async function tectonicWorks(bin: string): Promise<boolean> {
+  try {
+    await execFileAsync(bin, ["--version"], { timeout: 15_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Memoised so concurrent exports share one resolution / download.
+let tectonicResolution: Promise<string> | null = null;
+
+async function resolveTectonic(): Promise<string> {
+  const explicit = process.env.TECTONIC_PATH;
+  if (explicit && (await tectonicWorks(explicit))) return explicit;
+  if (await tectonicWorks("tectonic")) return "tectonic";
+
+  // Self-bootstrap: only the linux-x86_64 build is fetched, so bail clearly
+  // elsewhere (e.g. local Windows/macOS dev) rather than downloading a dud.
+  if (process.platform !== "linux") {
+    throw new Error(
+      "tectonic not found and auto-download only supports linux-x64. Install Tectonic locally or set TECTONIC_PATH."
+    );
+  }
+
+  const cacheDir = process.env.TECTONIC_CACHE_DIR || path.join(os.tmpdir(), "req2ui-tectonic");
+  const bin = path.join(cacheDir, "tectonic");
+  if (await tectonicWorks(bin)) return bin;
+
+  await fs.mkdir(cacheDir, { recursive: true });
+  const res = await fetch(TECTONIC_URL);
+  if (!res.ok) throw new Error(`Tectonic download failed: HTTP ${res.status}`);
+  const tarPath = path.join(cacheDir, "tectonic.tar.gz");
+  await fs.writeFile(tarPath, Buffer.from(await res.arrayBuffer()));
+  await execFileAsync("tar", ["-xzf", tarPath, "-C", cacheDir]);
+  await fs.chmod(bin, 0o755);
+  await fs.rm(tarPath, { force: true }).catch(() => {});
+
+  if (!(await tectonicWorks(bin))) throw new Error("Tectonic downloaded but failed to run.");
+  return bin;
+}
+
+/** Resolves a usable `tectonic` binary, downloading it once if necessary. */
+function ensureTectonic(): Promise<string> {
+  if (!tectonicResolution) {
+    tectonicResolution = resolveTectonic().catch((err) => {
+      tectonicResolution = null; // allow retry on a later request
+      throw err;
+    });
+  }
+  return tectonicResolution;
+}
 
 /**
  * Compiles the SRS to a print-quality PDF by rendering {@link generateLaTeX} with
@@ -755,9 +818,10 @@ export async function compileLaTeX(
     const tex = generateLaTeX(projectName, artifacts, meta, diagramImages);
     await fs.writeFile(path.join(workdir, "main.tex"), tex, "utf8");
 
+    const tectonicBin = await ensureTectonic();
     try {
       await execFileAsync(
-        TECTONIC_BIN,
+        tectonicBin,
         ["main.tex", "--outdir", workdir, "--chatter", "minimal"],
         { cwd: workdir, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }
       );

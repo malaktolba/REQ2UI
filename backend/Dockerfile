@@ -23,8 +23,10 @@ RUN npm run build
 
 # Pre-fetch every package the SRS preamble pulls in, so the first real export
 # doesn't pay the one-time download. Cache lands in /root/.cache/Tectonic.
+# Non-fatal: warming is an optimization, so a transient bundle-download hiccup
+# must not fail the deploy (the first real export would just re-fetch).
 RUN printf '%s' '\documentclass[11pt,a4paper]{report}\usepackage[utf8]{inputenc}\usepackage[T1]{fontenc}\usepackage{lmodern}\usepackage[a4paper,margin=1in]{geometry}\usepackage[table]{xcolor}\usepackage{booktabs}\usepackage{array}\usepackage{tabularx}\usepackage{xltabular}\usepackage{ragged2e}\usepackage{enumitem}\usepackage{caption}\usepackage{graphicx}\usepackage{float}\usepackage{titlesec}\usepackage{fancyhdr}\usepackage{hyperref}\begin{document}warm\end{document}' > /tmp/warm.tex \
-    && tectonic /tmp/warm.tex --outdir /tmp \
+    && (tectonic /tmp/warm.tex --outdir /tmp || echo "tectonic warm-cache skipped") \
     && rm -f /tmp/warm.*
 
 ENV NODE_ENV=production
