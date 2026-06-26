@@ -724,6 +724,50 @@ function TraceabilityView({ data }: { data: any }) {
 
 let mermaidReady = false;
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/**
+ * Rewrites a Mermaid-rendered SVG so its labels survive server-side PNG
+ * rasterisation. Mermaid v11 renders every node/edge label as a `<foreignObject>`
+ * holding HTML; resvg-js (used by the backend to turn these SVGs into the PNG
+ * figures embedded in the PDF / LaTeX export) cannot render foreignObject, so
+ * those labels come out blank. We replace each foreignObject with a native SVG
+ * `<text>` centred in the same box, which resvg renders fine. Layout is
+ * unaffected on screen because this only runs on the export capture, not the
+ * on-screen display. Best-effort: any failure returns the SVG untouched so the
+ * export never breaks.
+ */
+function inlineForeignObjectLabels(svgString: string): string {
+  try {
+    const doc = new DOMParser().parseFromString(svgString, "image/svg+xml");
+    if (doc.getElementsByTagName("parsererror").length) return svgString;
+    const fos = Array.from(doc.getElementsByTagName("foreignObject"));
+    for (const fo of fos) {
+      const parent = fo.parentNode;
+      if (!parent) continue;
+      const text = (fo.textContent ?? "").replace(/\s+/g, " ").trim();
+      if (!text) { parent.removeChild(fo); continue; }
+      const x = parseFloat(fo.getAttribute("x") ?? "0") || 0;
+      const y = parseFloat(fo.getAttribute("y") ?? "0") || 0;
+      const w = parseFloat(fo.getAttribute("width") ?? "0") || 0;
+      const h = parseFloat(fo.getAttribute("height") ?? "0") || 0;
+      const t = doc.createElementNS(SVG_NS, "text");
+      t.setAttribute("x", String(x + w / 2));
+      t.setAttribute("y", String(y + h / 2));
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("dominant-baseline", "central");
+      t.setAttribute("font-family", "sans-serif");
+      t.setAttribute("font-size", `${Math.max(10, Math.min(16, Math.round(h * 0.6)))}px`);
+      t.setAttribute("fill", "#333333");
+      t.textContent = text;
+      parent.replaceChild(t, fo);
+    }
+    return new XMLSerializer().serializeToString(doc);
+  } catch {
+    return svgString;
+  }
+}
+
 function MermaidDiagram({ code, uid }: { code: string; uid: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1670,7 +1714,12 @@ export default function ArtifactsViewer() {
         for (const d of diagrams) {
           try {
             const { svg } = await mermaid.render(`pdf-export-${d.id}`, d.mermaid);
-            svgs[d.id] = svg;
+            // Mermaid v11 always emits node/edge labels as <foreignObject> HTML
+            // (htmlLabels:false no longer switches them to SVG <text>). The PNG
+            // rasteriser used for PDF/LaTeX export (resvg) can't render
+            // foreignObject, so labels come out blank. Inline them as SVG <text>
+            // so the exported diagrams keep their words.
+            svgs[d.id] = inlineForeignObjectLabels(svg);
           } catch {
             // skip diagrams that fail to render
           }
