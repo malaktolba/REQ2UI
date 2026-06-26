@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import { ThemeProvider } from "./context/ThemeContext";
-import { ProtectedRoute, GuestRoute } from "./components/ProtectedRoute";
+import { ProtectedRoute, GuestRoute, AdminRoute } from "./components/ProtectedRoute";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import CreateProject from "./pages/CreateProject";
 import ProjectDetail from "./pages/ProjectDetail";
 import ArtifactsViewer from "./pages/ArtifactsViewer";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
@@ -31,6 +32,9 @@ export default function App() {
               <Route path="/projects/new" element={<CreateProject />} />
               <Route path="/projects/:id" element={<ProjectDetail />} />
               <Route path="/projects/:id/artifacts" element={<ArtifactsViewer />} />
+            </Route>
+            <Route element={<AdminRoute />}>
+              <Route path="/admin" element={<Admin />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

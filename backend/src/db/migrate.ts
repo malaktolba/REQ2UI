@@ -16,6 +16,13 @@ async function migrate() {
     )
   `;
 
+  // Admin flag for the internal analytics dashboard. Defaults false; promoted
+  // either by listing an email in ADMIN_EMAILS (auto-applied on auth) or by
+  // flipping this column directly. Idempotent for pre-existing databases.
+  await sql`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE
+  `;
+
   await sql`
     CREATE TABLE IF NOT EXISTS refresh_tokens (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

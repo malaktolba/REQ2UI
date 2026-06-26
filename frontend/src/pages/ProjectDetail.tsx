@@ -7,7 +7,6 @@ import { useToast } from "../context/ToastContext";
 import { CheckIcon, XIcon, SpinnerIcon, CircleIcon, ArrowLeft, ArrowRight } from "../components/Icons";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { UIPreferencesForm, UIPreferencesSummary } from "../components/UIPreferencesForm";
-import { QualityReport } from "../components/QualityReport";
 import { cleanPreferences, summarizePreferences } from "../config/uiPreferences";
 import { Button, Input, Textarea, Label, Logo, Kicker, buttonClass } from "../components/ui";
 import { LoadingScreen } from "../components/LoadingScreen";
@@ -414,12 +413,6 @@ export default function ProjectDetail() {
             })()}
           </div>
 
-          {/* AI Quality Report — shown once the project has been generated. */}
-          {project.status === "completed" && (
-            <div className="pt-4 border-t border-slate-800 light:border-slate-200">
-              <QualityReport projectId={id!} />
-            </div>
-          )}
         </div>
 
         {/* Pipeline stages */}

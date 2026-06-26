@@ -140,7 +140,7 @@ function ArtifactCard({ a }: { a: ArtifactScore }) {
 
 // ─── report body ─────────────────────────────────────────────────────────────
 
-function ReportView({ report }: { report: EvaluationReport }) {
+export function ReportView({ report }: { report: EvaluationReport }) {
   const order: (keyof EvaluationReport["scores"])[] = ["srs", "ui", "uml", "tests"];
   return (
     <div className="space-y-6">

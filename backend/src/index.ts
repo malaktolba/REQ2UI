@@ -9,6 +9,9 @@ import projectRoutes from "./routes/projects.routes";
 import generateRoutes from "./routes/generate.routes";
 import exportRoutes from "./routes/export.routes";
 import evaluationRoutes from "./routes/evaluation.routes";
+import adminRoutes from "./routes/admin.routes";
+import { requireAuth } from "./middleware/auth.middleware";
+import { blockAdmin } from "./middleware/admin.middleware";
 
 const app = express();
 
@@ -28,10 +31,13 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
-app.use("/api/projects", projectRoutes);
-app.use("/api/projects", generateRoutes);
-app.use("/api/projects", exportRoutes);
-app.use("/api/projects", evaluationRoutes);
+// Project-scoped APIs are the normal-user surface; admins are analytics-only
+// and rejected by blockAdmin (which runs after requireAuth populates req.user).
+app.use("/api/projects", requireAuth, blockAdmin, projectRoutes);
+app.use("/api/projects", requireAuth, blockAdmin, generateRoutes);
+app.use("/api/projects", requireAuth, blockAdmin, exportRoutes);
+app.use("/api/projects", requireAuth, blockAdmin, evaluationRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 

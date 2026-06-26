@@ -82,11 +82,19 @@ async function generate(
   maxTokens: number,
   temperature: number,
   json: boolean,
-  retries: number
+  retries: number,
+  opts: { chain?: string[]; thinking?: boolean; failFast?: boolean } = {}
 ): Promise<string> {
   let lastError: unknown;
-  // Try the last model that worked first, then the rest of the chain (deduped).
-  const chain = Array.from(new Set([preferredModel, ...MODEL_CHAIN]));
+  // Normally try the last model that worked first. A caller can pass its own
+  // `chain` (the GEval judge leads with the most capable models); the global
+  // chain is appended as a last resort. When an override chain is used we don't
+  // update `preferredModel`, so the cheap generation flow isn't dragged onto the
+  // expensive judge model afterwards.
+  const override = !!opts.chain?.length;
+  const chain = override
+    ? Array.from(new Set([...opts.chain!, ...MODEL_CHAIN]))
+    : Array.from(new Set([preferredModel, ...MODEL_CHAIN]));
   // Outer loop: walk the model fallback chain. Inner loop: retry the current
   // model on transient errors (honouring server backoff), then move on.
   for (const model of chain) {
@@ -102,25 +110,36 @@ async function generate(
               ...(json ? { responseMimeType: "application/json" } : {}),
               temperature,
               maxOutputTokens: maxTokens,
-              // gemini-2.5-flash is a thinking model and thinking tokens count
-              // against maxOutputTokens — leave it on and a low cap starves the
-              // visible output (truncated/unterminated JSON). UI/HTML gen doesn't
-              // need reasoning, so disable it for predictable, complete output.
-              thinkingConfig: { thinkingBudget: 0 },
+              // Thinking tokens count against maxOutputTokens — a low cap with
+              // thinking on starves the visible output (truncated/unterminated
+              // JSON). UI/HTML gen doesn't need reasoning, so it's disabled by
+              // default. The GEval judge opts in (`thinking: true`) because the
+              // most capable model (gemini-2.5-pro) ONLY runs in thinking mode
+              // and reasoning improves judgement quality; it pairs this with a
+              // higher token cap so the JSON verdict still completes.
+              ...(opts.thinking ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
             },
           })
         );
         const raw = res.text;
         if (!raw) throw new Error("Empty response from Gemini");
-        preferredModel = model; // remember the winner for the next call
+        if (!override) preferredModel = model; // remember the winner for the next call
         return raw;
       } catch (err) {
         lastError = err;
         const backoff = retryDelayMs(err, attempt);
+        // In fail-fast mode (the judge), a transient error on a non-last model
+        // skips the same-model backoff and drops straight to the next model in
+        // the chain — so a persistently overloaded preferred model (e.g. a 503
+        // on gemini-3.5-flash) costs one quick attempt, not a long backoff loop,
+        // before falling back. The last model still backs off, as it has nowhere
+        // left to fall.
+        const isLastModel = model === chain[chain.length - 1];
+        const canRetrySameModel = !opts.failFast || isLastModel;
         // Transient (429/503) with retries left → wait and retry the SAME model,
         // since its capacity may free up. Otherwise stop retrying this model and
         // fall through to the next model in the chain.
-        if (backoff !== null && attempt < retries) {
+        if (backoff !== null && attempt < retries && canRetrySameModel) {
           await sleep(backoff);
           continue;
         }
@@ -140,6 +159,48 @@ export async function callGeminiJSON(
   retries = 5
 ): Promise<any> {
   const raw = await generate(systemPrompt, userPrompt, maxTokens, 0.3, true, retries);
+  return JSON.parse(raw);
+}
+
+// Fallback chain for the GEval judge. Leads with gemini-3.5-flash (newest flash,
+// preferred), then gemini-2.5-pro (the most capable model — a strong, reliable
+// fallback when 3.5-flash is overloaded). Both are thinking-capable, and
+// gemini-2.5-pro ONLY runs in thinking mode, so the judge enables thinking.
+// callGeminiJudge runs fail-fast, so when the lead model is 503 it drops to the
+// next one immediately rather than backing off. Override the lead via
+// GEMINI_JUDGE_MODEL.
+const JUDGE_CHAIN = Array.from(
+  new Set(
+    [
+      process.env.GEMINI_JUDGE_MODEL,
+      "gemini-3.5-flash",      // preferred — newest flash
+      "gemini-2.5-pro",        // most capable (thinking-only) — reliable fallback
+      "gemini-2.5-flash",      // capable + reliably available
+      "gemini-3-flash-preview",
+      "gemini-3.1-flash-lite", // cheapest — last resort
+    ].filter(Boolean) as string[]
+  )
+);
+
+/** Model leading the judge chain (for docs/telemetry). */
+export const GEMINI_JUDGE_MODEL = JUDGE_CHAIN[0];
+
+/** JSON judge call on the best available Gemini model — used by the GEval evaluator. */
+export async function callGeminiJudge(
+  systemPrompt: string,
+  userPrompt: string,
+  maxTokens = 8000,
+  retries = 4
+): Promise<any> {
+  // Thinking enabled (required by gemini-2.5-pro and improves judgement); low
+  // temperature for consistent, repeatable scoring; generous token cap so the
+  // JSON verdict survives the thinking-token spend; fail-fast so an overloaded
+  // lead model falls through to the next without a long backoff.
+  const raw = await generate(systemPrompt, userPrompt, maxTokens, 0.2, true, retries, {
+    chain: JUDGE_CHAIN,
+    thinking: true,
+    failFast: true,
+  });
   return JSON.parse(raw);
 }
 

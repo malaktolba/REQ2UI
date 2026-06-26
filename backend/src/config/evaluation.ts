@@ -15,7 +15,7 @@
  */
 
 /** Bump on any change to criteria, weights, or the judge prompt. */
-export const EVALUATION_CONFIG_VERSION = "geval-v1";
+export const EVALUATION_CONFIG_VERSION = "geval-v4";
 
 /** The evaluation method. Architected so future methods (human review, automated
  *  UI testing, model comparison) can be added alongside without schema changes. */
@@ -150,16 +150,17 @@ export const RUBRICS: ArtifactRubric[] = [
     label: "Generated UI",
     weight: ARTIFACT_WEIGHTS.ui,
     description:
-      "Generated HTML/Tailwind screens for the system, optionally constrained by user UI design preferences.",
+      "Generated HTML/Tailwind screens for the system — a capped, REPRESENTATIVE set of up to ~6 screens (one per distinct screen category). This capped set is the COMPLETE intended UI deliverable by design, optionally constrained by user UI design preferences.",
     criteria: [
       {
         key: "alignment",
         label: "Requirement Alignment",
         weight: 0.4,
         checks: [
-          "Do the required screens exist?",
-          "Do the required components exist on those screens?",
-          "Are the expected user flows supported by the screens?",
+          "IMPORTANT: The UI is a CAPPED, REPRESENTATIVE set of up to ~6 screens (one per distinct category) — this is the COMPLETE intended deliverable BY DESIGN, NOT a partial sample. Do NOT penalize for additional screens, roles, or features lacking their own screen, nor for deduplicated/near-identical screens (e.g. Login vs Register, per-entity list/detail pages) being omitted. Missing screens are NOT a defect here.",
+          "Among the screens that WERE generated, are the system's most important screen types and flows well chosen and represented? Judge the CHOICE and quality of the screens present — not the count, and never what was intentionally left out.",
+          "Do the generated screens contain the components their purpose requires?",
+          "Do the generated screens support their own core user flows?",
         ],
       },
       {

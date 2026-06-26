@@ -13,11 +13,13 @@ export function ProtectedRoute() {
   if (loading) return <RouteSpinner />;
 
   // Send unauthenticated users to login, remembering where they meant to go.
-  return user ? (
-    <Outlet />
-  ) : (
-    <Navigate to="/login" replace state={{ from: location }} />
-  );
+  if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
+
+  // Admin accounts are analytics-only — keep them out of the normal-user
+  // surface (dashboard, projects) and on the admin dashboard instead.
+  if (user.isAdmin) return <Navigate to="/admin" replace />;
+
+  return <Outlet />;
 }
 
 export function GuestRoute() {
@@ -27,4 +29,15 @@ export function GuestRoute() {
 
   // Authenticated users have no business on login/register.
   return user ? <Navigate to="/dashboard" replace /> : <Outlet />;
+}
+
+export function AdminRoute() {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) return <RouteSpinner />;
+
+  // Unauthenticated → login; authenticated-but-not-admin → dashboard.
+  if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
+  return user.isAdmin ? <Outlet /> : <Navigate to="/dashboard" replace />;
 }

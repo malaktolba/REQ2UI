@@ -4,7 +4,7 @@ import { sql } from "../db/client";
 import { requireAuth } from "../middleware/auth.middleware";
 import { runPipeline, regenerateUICode } from "../services/pipeline.service";
 import { refineUI, RefinementScope } from "../services/refinement.service";
-import { evaluateProject } from "../services/evaluation.service";
+import { ensureEvaluationFresh } from "../services/evaluation.service";
 
 const router = Router();
 
@@ -77,18 +77,13 @@ router.get("/:id/generate", requireAuth, genLimiter, async (req: Request, res: R
       }
     );
 
-    // GEval quality evaluation runs after generation as an independent step.
-    // It must NEVER block or fail the pipeline result — any error here is caught
-    // and reported as an evaluation event, while "done" still fires normally.
-    try {
-      send("evaluation", { status: "running" });
-      const evaluation = await evaluateProject(project.id, userId);
-      send("evaluation", { status: "completed", evaluation });
-    } catch (evalErr: any) {
-      send("evaluation", { status: "failed", error: evalErr?.message ?? "Evaluation failed" });
-    }
-
     send("done", { message: "Pipeline complete" });
+
+    // GEval quality evaluation runs afterwards as an independent, background
+    // step — it's an admin-only analytics signal and is NOT surfaced to the
+    // user, so it never blocks "done". Fire-and-forget; the helper persists the
+    // report to the DB and swallows its own errors.
+    void ensureEvaluationFresh(project.id);
   } catch (err: any) {
     send("error", { error: err?.message ?? "Pipeline failed" });
   } finally {
@@ -158,7 +153,7 @@ router.get("/:id/artifacts", requireAuth, async (req: Request, res: Response): P
   const { id } = req.params;
 
   const projectRows = await sql`
-    SELECT id FROM projects WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL
+    SELECT id, status FROM projects WHERE id = ${id} AND user_id = ${userId} AND deleted_at IS NULL
   ` as any[];
 
   if (!projectRows.length) {
@@ -171,6 +166,13 @@ router.get("/:id/artifacts", requireAuth, async (req: Request, res: Response): P
   ` as any[];
 
   res.json({ artifacts });
+
+  // Opportunistic background GEval: while the user views their artifacts, run a
+  // quality evaluation if none is current. Fire-and-forget, persisted to the DB,
+  // never shown to the user (admin-only analytics). Only for completed projects.
+  if (projectRows[0].status === "completed") {
+    void ensureEvaluationFresh(id as string);
+  }
 });
 
 // GET /api/projects/:id/artifacts/:type

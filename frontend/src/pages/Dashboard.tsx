@@ -138,6 +138,14 @@ export default function Dashboard() {
         <div className="max-w-3xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link to="/"><Logo size="sm" /></Link>
           <div className="flex items-center gap-2">
+            {user?.isAdmin && (
+              <Link
+                to="/admin"
+                className="mono-label text-[10px] text-indigo-400 hover:text-indigo-300 transition mr-1"
+              >
+                Admin
+              </Link>
+            )}
             <span className="mono-label text-[10px] text-muted hidden sm:block mr-2">{user?.name}</span>
             <ThemeToggle />
             <button

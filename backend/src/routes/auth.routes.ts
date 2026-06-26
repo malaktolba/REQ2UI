@@ -11,6 +11,7 @@ import {
   revokeRefreshToken,
 } from "../services/token.service";
 import { requireAuth } from "../middleware/auth.middleware";
+import { isAdminEmail } from "../services/admin.service";
 import { User } from "../types";
 
 const router = Router();
@@ -70,12 +71,17 @@ router.post("/register", authLimiter, async (req: Request, res: Response): Promi
   ` as any[];
 
   const user = rows[0];
+  // Auto-grant admin if the email is on the allowlist, so the very first login
+  // of an allowlisted account already has dashboard access.
+  const isAdmin = isAdminEmail(user.email);
+  if (isAdmin) await sql`UPDATE users SET is_admin = TRUE WHERE id = ${user.id}`;
+
   const family = uuidv4();
-  const accessToken = signAccessToken({ sub: user.id, email: user.email, name: user.name });
+  const accessToken = signAccessToken({ sub: user.id, email: user.email, name: user.name, isAdmin });
   const refreshRaw = await issueRefreshToken(user.id, family);
 
   res.cookie("refresh_token", refreshRaw, COOKIE_OPTS);
-  res.status(201).json({ accessToken, user: { id: user.id, email: user.email, name: user.name } });
+  res.status(201).json({ accessToken, user: { id: user.id, email: user.email, name: user.name, isAdmin } });
 });
 
 // POST /api/auth/login
@@ -119,15 +125,17 @@ router.post("/login", authLimiter, async (req: Request, res: Response): Promise<
     return;
   }
 
-  // Reset on success
-  await sql`UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ${user.id}`;
+  // Reset on success. Promote to admin if the email is allowlisted (covers
+  // accounts that registered before being added to ADMIN_EMAILS).
+  const isAdmin = isAdminEmail(user.email) || user.is_admin === true;
+  await sql`UPDATE users SET failed_attempts = 0, locked_until = NULL, is_admin = ${isAdmin} WHERE id = ${user.id}`;
 
   const family = uuidv4();
-  const accessToken = signAccessToken({ sub: user.id, email: user.email, name: user.name });
+  const accessToken = signAccessToken({ sub: user.id, email: user.email, name: user.name, isAdmin });
   const refreshRaw = await issueRefreshToken(user.id, family);
 
   res.cookie("refresh_token", refreshRaw, COOKIE_OPTS);
-  res.json({ accessToken, user: { id: user.id, email: user.email, name: user.name } });
+  res.json({ accessToken, user: { id: user.id, email: user.email, name: user.name, isAdmin } });
 });
 
 // POST /api/auth/refresh
@@ -146,7 +154,7 @@ router.post("/refresh", async (req: Request, res: Response): Promise<void> => {
   }
 
   const rows = await sql`
-    SELECT id, email, name FROM users WHERE id = ${result.userId}
+    SELECT id, email, name, is_admin FROM users WHERE id = ${result.userId}
   ` as any[];
 
   if (!rows.length) {
@@ -155,10 +163,11 @@ router.post("/refresh", async (req: Request, res: Response): Promise<void> => {
   }
 
   const user = rows[0];
-  const accessToken = signAccessToken({ sub: user.id, email: user.email, name: user.name });
+  const isAdmin = isAdminEmail(user.email) || user.is_admin === true;
+  const accessToken = signAccessToken({ sub: user.id, email: user.email, name: user.name, isAdmin });
 
   res.cookie("refresh_token", result.newRaw, COOKIE_OPTS);
-  res.json({ accessToken, user: { id: user.id, email: user.email, name: user.name } });
+  res.json({ accessToken, user: { id: user.id, email: user.email, name: user.name, isAdmin } });
 });
 
 // POST /api/auth/logout

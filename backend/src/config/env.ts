@@ -16,4 +16,10 @@ export const env = {
   NODE_ENV: process.env.NODE_ENV ?? "development",
   PORT: parseInt(process.env.PORT ?? "4000", 10),
   FRONTEND_URL: process.env.FRONTEND_URL ?? "http://localhost:5173",
+  // Comma-separated allowlist of emails granted admin access to the analytics
+  // dashboard. Matched case-insensitively; whitespace trimmed.
+  ADMIN_EMAILS: (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
 };
