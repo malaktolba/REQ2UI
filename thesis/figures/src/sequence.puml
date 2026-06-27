@@ -12,7 +12,7 @@ skinparam sequence {
   LifeLineBorderColor #88A
 }
 
-title Req2UI - Generate Artifacts (10-stage SSE pipeline)
+title Req2UI - Generate Artifacts (10-stage SSE pipeline + GEval)
 
 actor User
 participant "React SPA" as SPA
@@ -20,6 +20,7 @@ participant "Express API" as API
 participant "Pipeline\nService" as PIPE
 participant "Groq" as GROQ
 participant "Gemini" as GEM
+participant "GEval\nEvaluator" as JUDGE
 database "Neon DB" as DB
 
 User -> SPA : open project, click Generate
@@ -27,18 +28,23 @@ SPA -> API : GET /projects/:id/generate?token=JWT (SSE)
 API -> API : verify JWT
 API -> PIPE : run(projectId)
 
-loop stages 1..9 (Groq)
-  PIPE -> GROQ : prompt(stage input)
-  GROQ --> PIPE : structured JSON
+loop stages 1..9 (routed per stage)
+  alt stage in {1,3,4,7,8}
+    PIPE -> GROQ : prompt(stage input)
+    GROQ --> PIPE : structured JSON
+  else stage in {2,5,6,9}
+    PIPE -> GEM : prompt(stage input)
+    GEM --> PIPE : structured JSON\n(Groq fallback on outage)
+  end
   PIPE -> DB : upsert artifact + stage status
   PIPE --> SPA : SSE event {stage, progress}
   SPA --> User : live progress bar
 end
 
-group stage 10 - UI code (Gemini)
+group stage 10 - UI code (Gemini, two-pass)
   PIPE -> GEM : design system prompt
   GEM --> PIPE : navbar/footer/Tailwind config
-  loop each distinct screen
+  loop each distinct screen (batched)
     PIPE -> GEM : per-screen HTML prompt
     GEM --> PIPE : screen HTML
   end
@@ -46,7 +52,13 @@ group stage 10 - UI code (Gemini)
   PIPE --> SPA : SSE event {stage 10 done}
 end
 
+PIPE -> JUDGE : evaluate(projectId)
+JUDGE -> GEM : judge each dimension\n(SRS, UI, UML, tests)
+GEM --> JUDGE : weighted 1-5 scores
+JUDGE -> DB : persist evaluation report
+JUDGE --> SPA : SSE event {evaluation, overall %}
+
 PIPE --> API : complete
 API --> SPA : SSE done
-SPA --> User : render artifacts viewer
+SPA --> User : render artifacts viewer + quality report
 @enduml

@@ -95,7 +95,7 @@ Dr. Salma Radwan Abdel-Hamid\par}
 
 \chapter*{Abstract}
 \addcontentsline{toc}{chapter}{Abstract}
-The project aims to develop an AI-driven Automated Software Requirement Specification (SRS) Generator that streamlines the process of requirement gathering and documentation. The system automatically generates functional, non-functional, and security requirements based on project inputs. It identifies sensitive features such as login systems, payment gateways, or data uploads and integrates related security policies automatically. Additionally, the system converts generated requirements into low-fidelity UI prototypes using HTML/Tailwind templates. These prototypes visually represent the application's key functional and security components, including authentication and privacy features. Finally, the project integrates an automated test case generator that creates functional and security test cases aligned with OWASP Top 10 guidelines. This approach ensures that security and quality are embedded early in the software development lifecycle, reducing development time and enhancing software reliability.
+This thesis presents Req2UI, an AI-powered platform that automatically transforms a single natural-language software project description into a complete set of software-engineering artifacts. At its core is a ten-stage AI pipeline that produces an IEEE~830 Software Requirements Specification---functional, non-functional, and OWASP Top~10--aligned security requirements---together with IEEE~829 functional and security test cases, a requirements traceability matrix, six to eight UML diagrams spanning multiple diagram types, and runnable HTML/Tailwind UI code, all exportable as PDF, DOCX, LaTeX, and CSV. Security is embedded from the requirements phase: the system detects security-sensitive features such as authentication, payment, and data-upload flows and generates the corresponding controls and tests automatically, bringing security and testing concerns forward in the software development lifecycle. Beyond generation, the platform contributes a per-stage \emph{multi-provider routing} scheme that places each artifact on the language model (Groq or Google~Gemini) that an independent evaluation showed best suits it; an independent \emph{GEval} (LLM-as-a-Judge) quality layer that grades every generation; \emph{Bring-Your-Own-Key} support that lets users run the pipeline on their own provider account with the key encrypted at rest; and an admin analytics dashboard that surfaces quality, timing, and per-model metrics live. The delivered system was evaluated through an automated suite of 124 backend tests and the built-in GEval evaluator, achieving an overall quality score of 82.5\% (UI code highest at 95\%) with a mean end-to-end generation time of approximately 116~seconds. The results show that an integrated, security-aware pipeline can produce consistent, standards-conformant documentation while substantially reducing manual effort.
 
 \chapter*{Acknowledgment}
 \addcontentsline{toc}{chapter}{Acknowledgment}
@@ -719,6 +719,47 @@ LLM latency metrics & 9 & Nearest-rank percentile computation, per-provider aggr
 Export service & 21 & LaTeX document structure (title page, front matter, numbered chapters), colour palette and styled headings, requirement tables, balanced \texttt{xltabular}/\texttt{itemize}/\texttt{enumerate} environments, folding of acceptance criteria and controls into rows, and CSV header/row correctness and counts. \\
 \bottomrule
 \end{longtable}
+
+\section{Requirements Traceability (Verification)}
+To demonstrate that the platform's functional requirements (Section~4.2) are actually verified rather than merely implemented, Table~\ref{tab:rtm} maps each functional requirement to the automated test suite(s) of Section~7.1 that exercise it. The matrix is the verification counterpart of the system's own generated traceability matrix (stage~8, Section~7.4): the latter links a \emph{project's} requirements to its generated test cases, whereas the matrix below links the \emph{platform's} requirements to the engineering tests that guard them.
+
+\begin{longtable}{L{0.9cm} L{3.7cm} L{6.1cm} L{1.5cm}}
+\caption{Functional-requirement-to-test traceability matrix (platform verification)}\label{tab:rtm}\\
+\toprule
+\textbf{FR} & \textbf{Requirement (summary)} & \textbf{Verifying test suite(s)} & \textbf{Type} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{FR} & \textbf{Requirement (summary)} & \textbf{Verifying test suite(s)} & \textbf{Type} \\
+\midrule
+\endhead
+FR1  & User registration \& authentication & Authentication routes; Auth middleware; Token service & Auto \\
+FR2  & Project creation \& management & Project routes & Auto \\
+FR3  & Project description input ($\leq$5000 chars) & Project routes (name/description bounds) & Auto \\
+FR4  & Input validation \& feedback & Project routes (validation); Pipeline service (vague-input detection) & Auto \\
+FR5  & Automated SRS generation & Pipeline service (orchestration, stage sequencing) & Auto \\
+FR6  & Requirement categorization & Pipeline service; Metrics service & Auto \\
+FR7  & SRS editing \& refinement & Frontend interaction (manual / exploratory) & Manual \\
+FR8  & Requirement traceability & Metrics service (traceability metric) & Auto \\
+FR9  & SRS export (PDF/DOCX/CSV/LaTeX) & Export service & Auto \\
+FR10 & Security feature identification & Pipeline service (stage~4 flow/routing) & Auto \\
+FR11 & Security requirement generation (OWASP) & Pipeline service & Auto \\
+FR12 & Security gap analysis & Pipeline service (flow); manual content review & Auto+Man.\ \\
+FR13 & Security risk assessment & Metrics service (validity: allowed priorities/OWASP) & Auto \\
+FR14 & Automated wireframe generation & Pipeline helpers (screen categorisation, distinct-screen selection) & Auto \\
+FR15 & Requirement-to-UI mapping & Pipeline helpers; UI preferences & Auto \\
+FR16 & UI preview \& interaction & Frontend interaction (manual / exploratory) & Manual \\
+FR17 & UI export (HTML / images) & Export service (LaTeX figures, resvg-js SVG$\rightarrow$PNG) & Auto \\
+FR18 & Functional test case generation & Pipeline service; Metrics service (coverage) & Auto \\
+FR19 & Security test case generation & Pipeline service & Auto \\
+FR20 & Test case organization (suites) & Pipeline service; Export service & Auto \\
+FR21 & Test case export formats & Export service & Auto \\
+FR22 & Artifact consistency management & Pipeline service (upsert/resumability); Pipeline helpers (HTML completeness) & Auto \\
+FR23 & Administrative dashboard & LLM latency metrics; Metrics service & Auto \\
+\bottomrule
+\end{longtable}
+
+\noindent Twenty-one of the twenty-three functional requirements have direct automated coverage in the Jest suite. The two exceptions---FR7 (interactive SRS editing) and FR16 (UI preview and interaction)---are purely client-side interaction features whose backend endpoints are already covered; they are verified through manual and exploratory testing of the React interface rather than unit tests. Several requirements are deliberately covered by more than one suite (for example, authentication spans the route, middleware, and token-service suites), which is why the suites in Table~\ref{tab:rtm} sum to more entries than there are requirements.
 
 \section{Functional and Security Test Cases (IEEE 829)}
 For each generated project, the system itself produces functional test cases (stage 5; at least two per functional requirement, including positive and negative paths) and security test cases (stage 6; attack-vector-driven, one or more per security requirement). These are presented to the user in IEEE 829 form---identifier, coverage link, preconditions, steps, and expected result---and are exported in the PDF, DOCX, and CSV documents. The traceability matrix (stage 8) then quantifies coverage, reporting the proportion of functional requirements linked to test cases.

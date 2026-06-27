@@ -17,21 +17,24 @@ title Req2UI - System Context
 actor "End User\n(developer, student,\nstartup)" as user
 actor "System\nAdministrator" as admin
 
-rectangle "**Req2UI System**\nAI-driven SRS, UI &\ntest-case generator" as system
+rectangle "**Req2UI System**\nAI-driven SRS, UI &\ntest-case generator\n+ GEval quality layer" as system
 
-cloud "Groq API\n(LLM - stages 1-9)" as groq
-cloud "Google Gemini API\n(UI code - stage 10)" as gemini
+cloud "Groq API\n(LLM - stages 1,3,4,7,8)" as groq
+cloud "Google Gemini API\n(stages 2,5,6,9,10\n+ GEval judge)" as gemini
+cloud "BYOK provider\n(user's own Anthropic /\nOpenAI / Gemini / Groq key)" as byok
 database "Neon PostgreSQL\n(managed cloud DB)" as db
 
-user --> system : project description (NL)
-system --> user : SRS, UI code, test cases,\nexports (PDF/DOCX/CSV/LaTeX)
-admin --> system : monitor usage,\nmanage accounts
+user --> system : project description (NL),\noptional provider key
+system --> user : SRS, UI code, test cases,\nUML, quality report,\nexports (PDF/DOCX/CSV/LaTeX)
+admin --> system : monitor usage & quality,\nmanage accounts
 
-system --> groq : requirement &\ntest-case prompts
+system --> groq : requirement &\nderivative prompts
 groq --> system : structured artifacts
-system --> gemini : design-system &\nper-screen prompts
-gemini --> system : HTML/Tailwind UI code
-system --> db : persist projects\n& artifacts
+system --> gemini : reqs, tests, UML,\nUI code & judge prompts
+gemini --> system : artifacts & quality scores
+system ..> byok : routes every stage\nif user key is set
+byok ..> system : artifacts
+system --> db : persist projects, artifacts,\nrevisions & evaluations
 db --> system : stored data
 
 @enduml

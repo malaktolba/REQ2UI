@@ -19,8 +19,12 @@ class User {
   +id: UUID
   +email: string
   +passwordHash: string
+  +role: string
   +failedAttempts: int
   +lockedUntil: timestamp
+  +providerName: string
+  +providerModel: string
+  +providerKeyEnc: string
   +createdAt: timestamp
 }
 
@@ -67,6 +71,24 @@ class Export {
   +createdAt: timestamp
 }
 
+class UiRevision {
+  +id: UUID
+  +projectId: UUID
+  +version: int
+  +content: JSONB
+  +createdAt: timestamp
+}
+
+class Evaluation {
+  +id: UUID
+  +projectId: UUID
+  +overallScore: number
+  +grade: string
+  +configVersion: string
+  +report: JSONB
+  +createdAt: timestamp
+}
+
 enum ArtifactType {
   EXTRACTION
   FUNCTIONAL_REQS
@@ -82,8 +104,10 @@ enum ArtifactType {
 
 class PipelineService <<service>> {
   +run(projectId): SSEStream
-  -callGroq(prompt): JSON
+  -routeStage(stage): Provider
+  -callProvider(prompt): JSON
   -upsertArtifact(...)
+  -deriveWireframesFromUI(...)
 }
 
 class GeminiService <<service>> {
@@ -92,10 +116,16 @@ class GeminiService <<service>> {
   -selectDistinctScreens(...)
 }
 
+class EvaluationService <<service>> {
+  +evaluate(projectId): Report
+  -judgeDimension(artifact): Score
+  -aggregateOverall(...)
+}
+
 class ExportService <<service>> {
   +ieeeSections(artifacts)
   +toPDF() / toDOCX()
-  +toCSV() / toLaTeX()
+  +toCSV() / toLaTeXZip()
 }
 
 User "1" --> "0..*" Project : owns
@@ -103,10 +133,14 @@ User "1" --> "0..*" RefreshToken : has
 Project "1" --> "0..*" Artifact : contains
 Project "1" --> "0..*" PipelineStage : tracks
 Project "1" --> "0..*" Export : produces
+Project "1" --> "0..*" UiRevision : versions UI
+Project "1" --> "0..*" Evaluation : graded by
 Artifact --> ArtifactType
 
 PipelineService ..> Project : reads/writes
 PipelineService ..> Artifact : upserts
-PipelineService ..> GeminiService : uses (stage 10)
+PipelineService ..> GeminiService : uses (stages 2,5,6,9,10)
+EvaluationService ..> Artifact : judges
+EvaluationService ..> Evaluation : persists
 ExportService ..> Artifact : assembles
 @enduml

@@ -30,25 +30,38 @@ else (yes)
 endif
 
 :Start pipeline (SSE);
-partition "Stages 1-9 (Groq)" {
-  :Extract requirements;
-  :Generate functional reqs;
-  :Generate non-functional reqs;
-  :Generate security reqs (OWASP);
-  :Generate functional test cases;
-  :Generate security test cases;
-  :Generate wireframe descriptions;
-  :Build traceability matrix;
-  :Generate UML (Mermaid);
+note right
+  Each stage runs on its
+  routed provider; if a user
+  BYOK key is set, every stage
+  runs on that provider instead.
+end note
+partition "Stages 1-9 (Groq + Gemini, routed per stage)" {
+  :Extract requirements (Groq);
+  :Generate functional reqs (Gemini);
+  :Generate non-functional reqs (Groq);
+  :Generate security reqs - OWASP (Groq);
+  :Generate functional test cases (Gemini);
+  :Generate security test cases (Gemini);
+  :Generate wireframe descriptions (Groq);
+  :Build traceability matrix (Groq);
+  :Generate UML - Mermaid (Gemini);
 }
 partition "Stage 10 (Gemini)" {
   :Generate design system;
   :Generate per-screen UI code;
+  :Derive wireframes from generated UI;
 }
 :Persist artifacts to DB;
 
-:User reviews / refines artifacts;
-:Preview generated UI code;
+partition "Quality evaluation (GEval, LLM-as-a-Judge)" {
+  :Grade SRS, UI, UML, test cases;
+  :Aggregate overall score + grade;
+  :Persist evaluation + stream report;
+}
+
+:User reviews artifacts & quality report;
+:Refine artifacts / preview UI code;
 if (Export?) then (yes)
   :Export PDF / DOCX / CSV / LaTeX;
 else (no)

@@ -18,33 +18,39 @@ skinparam ArrowColor #2F5C8F
 title Req2UI - System Architecture
 
 actor "User" as user
+actor "Administrator" as admin
 
 rectangle "Presentation Layer" #EAF2FB {
   component "React 19 SPA\n(Vite, Tailwind v4,\nReact Router 7)" as spa
+  component "Admin Analytics\nDashboard" as adminui
   component "Axios Client\n(silent JWT refresh)" as axios
 }
 
 rectangle "Application Layer (Express 4 / TypeScript)" #EAFBF1 {
   component "Auth Service\n(JWT, refresh rotation,\naccount lockout)" as auth
   component "Project Controller" as proj
-  component "Pipeline Service\n(10-stage SSE generator)" as pipe
+  component "Pipeline Service\n(10-stage SSE generator,\nper-stage provider routing)" as pipe
+  component "GEval Evaluator\n(LLM-as-a-Judge,\nquality grading)" as geval
   component "Export Service\n(IEEE 830 assembly)" as exp
 }
 
-rectangle "AI Providers" #FBF4EA {
-  component "Groq\n(llama-3.3-70b)\nStages 1-9" as groq
-  component "Google Gemini\n(2.5 Flash-Lite)\nStage 10 - UI code" as gemini
+rectangle "AI Providers (routed per stage)" #FBF4EA {
+  component "Groq\n(llama-3.3-70b /\n3.1-8b-instant)\nStages 1,3,4,7,8" as groq
+  component "Google Gemini\n(gemini-3.1-flash-lite)\nStages 2,5,6,9,10\n+ GEval judge" as gemini
+  component "BYOK provider\n(user's Anthropic / OpenAI /\nGemini / Groq key,\nAES-256-GCM at rest)" as byok
 }
 
 rectangle "Data Layer" #F3EAFB {
-  database "Neon PostgreSQL\nusers, projects,\nartifacts, pipeline_stages,\nrefresh_tokens, exports" as db
+  database "Neon PostgreSQL\nusers, projects, artifacts,\npipeline_stages, refresh_tokens,\nexports, ui_revisions, evaluations" as db
 }
 
 rectangle "Export Renderers" #FBEAF1 {
-  component "pdfkit / docx.js /\ncsv-writer / resvg-js\n(PDF, DOCX, CSV, LaTeX)" as render
+  component "Tectonic (LaTeX->PDF) /\ndocx.js / csv-writer /\nresvg-js / JSZip\n(PDF, DOCX, CSV, LaTeX)" as render
 }
 
 user --> spa
+admin --> adminui
+adminui --> axios
 spa --> axios
 axios --> auth : HTTPS /api
 axios --> proj : HTTPS /api
@@ -55,6 +61,10 @@ proj --> db
 pipe --> db
 pipe --> groq
 pipe --> gemini
+pipe ..> byok : if user key set
+pipe --> geval : after pipeline
+geval --> gemini : judge calls
+geval --> db : persist evaluations
 proj --> exp
 exp --> db
 exp --> render
