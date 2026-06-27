@@ -61,18 +61,20 @@ const STAGE_NAMES = [
 // Lighter structured stages get tighter caps for runaway protection; the
 // content-heavy stages (functional reqs, test cases, wireframes) keep headroom.
 const STAGE_MAX_TOKENS = [
-  5000, // 1  Requirement Extraction + SRS narrative front-matter
-  6000, // 2  Functional Requirements
-  3000, // 3  Non-Functional Requirements
-  4000, // 4  Security Requirements
-  8000, // 5  Functional Test Cases (2+ per FR — largest JSON stage)
-  4000, // 6  Security Test Cases
-  6000, // 7  UI Wireframe Descriptions
-  4000, // 8  Traceability Matrix
-  9000, // 9  UML Diagrams (now 6–8 diagrams across multiple UML types)
+  5000,  // 1  Requirement Extraction + SRS narrative front-matter
+  8000,  // 2  Functional Requirements (atomic decomposition + acceptance criteria)
+  3000,  // 3  Non-Functional Requirements
+  4000,  // 4  Security Requirements
+  10000, // 5  Functional Test Cases (positive + negative/edge per FR — largest JSON stage)
+  6000,  // 6  Security Test Cases (headroom so procedures never truncate mid-field)
+  6000,  // 7  UI Wireframe Descriptions
+  4000,  // 8  Traceability Matrix
+  9000,  // 9  UML Diagrams (now 6–8 diagrams across multiple UML types)
 ];
 
-// Preferred model per stage (indexed by stage number - 1). Easier, highly
+// Preferred Groq model per stage (indexed by stage number - 1). For Groq-routed
+// stages this is the model used; for Gemini-routed stages (see STAGE_PROVIDER)
+// this is the FALLBACK model if Gemini is unavailable. Easier, highly
 // structured/derivative stages run on the lighter model — which has far more
 // generous rate limits — to conserve the heavy model's scarce daily quota for
 // the stages that genuinely need its reasoning (prose, foundations, UML syntax).
@@ -83,11 +85,61 @@ const STAGE_MODEL = [
   GROQ_LIGHT, // 3  Non-Functional Requirements (structured/templated)
   GROQ_LIGHT, // 4  Security Requirements (mapped to known OWASP categories)
   GROQ_HEAVY, // 5  Functional Test Cases (largest JSON stage — quality/validity matters)
-  GROQ_LIGHT, // 6  Security Test Cases (derivative from SRs)
+  GROQ_HEAVY, // 6  Security Test Cases (procedure quality matters — judge penalised weak/truncated tests)
   GROQ_HEAVY, // 7  UI Wireframe Descriptions (creative; feeds UI generation)
   GROQ_LIGHT, // 8  Traceability Matrix (pure linking/lookup — easiest)
   GROQ_HEAVY, // 9  UML Diagrams (strict Mermaid syntax; weak models break it)
 ];
+
+// Provider per stage. The two things that scored highest in GEval — the generated
+// UI (100%) and the judge itself — are both Gemini, while the llama-class Groq
+// stages lagged (SRS/tests/UML). So we route the foundational + lowest-scoring
+// text stages to Gemini to close the writer-vs-judge capability gap; the rest
+// stay on Groq (lighter/derivative work, and Groq's quota is more generous, which
+// matters since Stage 10 already leans on Gemini). Gemini-routed stages fall back
+// to their Groq STAGE_MODEL if Gemini errors, so an outage degrades one stage's
+// quality rather than failing the whole pipeline.
+type StageProvider = "groq" | "gemini";
+const STAGE_PROVIDER: StageProvider[] = [
+  "groq",   // 1  Requirement Extraction (large prose output; not a flagged weak spot)
+  "gemini", // 2  Functional Requirements (foundation for every downstream artifact)
+  "groq",   // 3  Non-Functional Requirements (templated/derivative)
+  "groq",   // 4  Security Requirements (mapped to known OWASP categories)
+  "gemini", // 5  Functional Test Cases (lowest-scoring dimension)
+  "gemini", // 6  Security Test Cases (judge penalised weak/truncated procedures)
+  "groq",   // 7  UI Wireframe Descriptions (creative; feeds UI)
+  "groq",   // 8  Traceability Matrix (pure linking/lookup)
+  "gemini", // 9  UML Diagrams (entity/actor accuracy + strict Mermaid — Gemini stronger)
+];
+
+/**
+ * Runs a stage's structured-JSON call on its configured provider. Gemini-routed
+ * stages fall back to Groq (the stage's STAGE_MODEL) if Gemini errors, so a
+ * Gemini outage costs quality on that one stage instead of aborting the run.
+ * The provider that actually served the call is logged so a local run can verify
+ * Gemini is really being used (not silently falling back to Groq on a bad key).
+ */
+async function callStageLLM(
+  provider: StageProvider,
+  stageNum: number,
+  system: string,
+  user: string,
+  cap: number,
+  groqModel: string
+): Promise<any> {
+  if (provider === "gemini") {
+    try {
+      const out = await callGeminiJSON(system, user, cap);
+      console.info(`[pipeline] stage ${stageNum} served by Gemini`);
+      return out;
+    } catch (err: any) {
+      console.warn(`[pipeline] stage ${stageNum} Gemini call failed, falling back to Groq:`, err?.message);
+      return await callGroq(system, user, cap, groqModel);
+    }
+  }
+  console.info(`[pipeline] stage ${stageNum} served by Groq (${groqModel})`);
+  return await callGroq(system, user, cap, groqModel);
+}
 
 async function upsertStage(
   projectId: string,
@@ -138,11 +190,12 @@ async function runStage<T>(
   const name = STAGE_NAMES[stageNum - 1];
   const cap = maxTokens ?? STAGE_MAX_TOKENS[stageNum - 1] ?? 8000;
   const model = STAGE_MODEL[stageNum - 1] ?? GROQ_HEAVY;
+  const provider = STAGE_PROVIDER[stageNum - 1] ?? "groq";
   emit({ stage: stageNum, name, status: "running" });
   await upsertStage(projectId, stageNum, "running");
 
   try {
-    const raw = await callGroq(system, user, cap, model);
+    const raw = await callStageLLM(provider, stageNum, system, user, cap, model);
     const result = transform ? transform(raw) : raw;
     await upsertArtifact(projectId, artifactType, result);
     await upsertStage(projectId, stageNum, "completed");
@@ -884,7 +937,12 @@ Write the prose fields in clear, formal academic language suitable for a graduat
     const s2 = await stageOrCached<any>(
       cache,
       projectId, 2, "functional_requirements",
-      `You are a software requirements engineer. Convert extracted requirements into formal IEEE 830 functional requirements.
+      `You are a software requirements engineer. Convert the extracted requirements into formal IEEE 830 functional requirements.
+
+DECOMPOSE thoroughly: break each feature into ATOMIC, individually testable requirements — one observable system behaviour per requirement. Prefer several precise requirements over one broad umbrella statement. Cover the full breadth of the system: every distinct feature, sub-feature, and user action implied by the description maps to at least one requirement. Where the description names specific behaviours (e.g. conflict detection, real-time signalling, status transitions, role-specific views, sign-in/check-in), give each its own requirement instead of folding them into a generic "manage X".
+
+SCOPE — functional only: a functional requirement describes WHAT the system does (a behaviour, action, or rule). Do NOT restate non-functional qualities as functional requirements — performance/latency, offline tolerance, scalability, availability, maintainability, and security hardening belong in the NFR and security specs, not here. You may describe a behaviour that an NFR later constrains, but never duplicate the constraint itself as an FR.
+
 Return a JSON object with this exact shape:
 {
   "requirements": [
@@ -893,16 +951,19 @@ Return a JSON object with this exact shape:
       "title": "short title",
       "priority": "High|Medium|Low",
       "description": "The system shall ...",
-      "acceptance_criteria": ["criterion 1", "criterion 2"]
+      "acceptance_criteria": ["specific, verifiable criterion 1", "criterion 2"]
     }
   ]
 }
-Generate at least 10 functional requirements. Each must start with "The system shall".`,
+Generate at least 12 functional requirements (more if the system warrants it). Each "description" must start with "The system shall" and specify a SINGLE behaviour. Give each requirement 2+ concrete, verifiable acceptance criteria (exact states, messages, or outputs — never "works correctly"), since these directly drive the downstream test cases.`,
       `Project: ${projectName}
 System summary: ${s1.system_summary}
 Actors: ${s1.actors?.join(", ")}
 Extracted requirements:
-${s1.extracted?.map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}`,
+${s1.extracted?.map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}
+
+Non-functional constraints (do NOT restate these as functional requirements — they are captured separately in the NFR/security specs):
+${(s1.constraints ?? []).map((c: string) => `- ${c}`).join("\n") || "- (none provided)"}`,
       emit
     );
 
@@ -973,7 +1034,7 @@ ${s2.requirements?.map((r: any) => `${r.id}: ${r.title}`).join("\n")}`,
       stageOrCached<any>(
         cache,
         projectId, 5, "functional_test_cases",
-      `You are a QA engineer. Generate IEEE 829 functional test cases for the functional requirements.
+      `You are a senior QA engineer. Generate IEEE 829 functional test cases for the functional requirements.
 Return a JSON object with this exact shape:
 {
   "test_cases": [
@@ -981,18 +1042,29 @@ Return a JSON object with this exact shape:
       "id": "TC-001",
       "fr_id": "FR-001",
       "title": "short test title",
-      "preconditions": "system state before test",
-      "steps": ["step 1", "step 2", "step 3"],
-      "expected_result": "what should happen",
+      "type": "positive|negative|edge",
+      "preconditions": "system state + the ROLE performing the test (use only the actors listed below)",
+      "steps": ["concrete action with realistic test data", "..."],
+      "expected_result": "exact, verifiable outcome",
       "priority": "High|Medium|Low"
     }
   ]
 }
-Generate at least 2 test cases per functional requirement, covering positive, negative, and edge cases.
-Each "steps" entry must be a concrete action with realistic test data (not "step 1"). Each "expected_result" must be SPECIFIC and verifiable — state the exact output, message, or state change, never vague phrases like "works correctly". Always fill in "preconditions".`,
+
+COVERAGE — for EVERY functional requirement produce at least:
+- one POSITIVE test (the happy path succeeds), AND
+- one NEGATIVE or EDGE test (invalid input, missing/wrong permissions, boundary value, conflicting/duplicate state, or empty data) that proves the system rejects or safely handles it.
+A requirement covered only by positive tests is incomplete — always include the failure side.
+
+QUALITY rules:
+- Base each "expected_result" on the requirement's acceptance criteria, and state the EXACT message, status, or state change — e.g. "Booking is rejected with error 'Time slot unavailable' and no record is created". Never use vague phrases like "works correctly" or "with correct information".
+- "preconditions" must name the role/actor from the provided actor list — do NOT invent roles (e.g. don't write "production manager" if the actors are "Stage Manager"/"Producer"). Use the system's real role names exactly.
+- "steps" must be concrete actions with realistic data — never "step 1".
+- Each negative/edge test must target a SPECIFIC failure mode (invalid data, unauthorized role, boundary/limit, or conflicting state), not a generic "enter wrong data".`,
       `Project: ${projectName}
-Functional requirements:
-${s2.requirements?.map((r: any) => `${r.id}: ${r.title} — ${r.description}`).join("\n")}`,
+Actors (use ONLY these role names in preconditions): ${s1.actors?.join(", ")}
+Functional requirements (base each expected_result on the acceptance criteria shown):
+${s2.requirements?.map((r: any) => `${r.id}: ${r.title} — ${r.description}${r.acceptance_criteria?.length ? `\n   Acceptance: ${r.acceptance_criteria.join("; ")}` : ""}`).join("\n")}`,
         emit
       ),
     ]);
@@ -1003,7 +1075,7 @@ ${s2.requirements?.map((r: any) => `${r.id}: ${r.title} — ${r.description}`).j
       stageOrCached<any>(
         cache,
         projectId, 6, "security_test_cases",
-      `You are a penetration tester. Generate security test cases for the security requirements.
+      `You are a penetration tester. Generate security test cases that TEST each security requirement — attempt the weakness and verify the system's defence. Describe how to PROBE for the vulnerability and the secure behaviour you expect to observe; do NOT describe how to remediate or fix it.
 Return a JSON object with this exact shape:
 {
   "test_cases": [
@@ -1011,14 +1083,17 @@ Return a JSON object with this exact shape:
       "id": "STC-001",
       "sr_id": "SR-001",
       "title": "short test title",
-      "attack_vector": "describe the attack being tested",
-      "steps": ["step 1", "step 2"],
-      "expected_result": "expected secure behavior",
+      "attack_vector": "the specific attack/technique being attempted",
+      "steps": ["concrete attacker action 1", "..."],
+      "expected_result": "the exact secure behaviour: how the system rejects, blocks, or safely handles the attempt",
       "severity": "Critical|High|Medium|Low"
     }
   ]
 }
-Generate at least 1 test case per security requirement. Each test must map to a DISTINCT security requirement and a distinct attack vector — do NOT produce redundant or duplicate tests, and make sure the title, attack_vector, and expected_result agree. Each "expected_result" must state the specific secure behavior (the exact rejection, response, or safeguard); "steps" must be concrete actions.`,
+Generate at least 1 test case per security requirement. Each test maps to a DISTINCT security requirement and a distinct attack vector — no redundant or duplicate tests; title, attack_vector, and expected_result must agree.
+- "steps" are the attacker's concrete actions (the test procedure) — what you send/do to exercise the weakness.
+- "expected_result" is the observed secure RESPONSE (the rejection, sanitisation, lockout, 403, or audit-log entry), NOT a remediation or "the system should be patched" instruction.
+- Keep every test self-contained and COMPLETE — fully populate each field and never truncate a test mid-sentence.`,
       `Project: ${projectName}
 Security requirements:
 ${s4.requirements?.map((r: any) => `${r.id}: ${r.title} (${r.owasp_category})`).join("\n")}`,
@@ -1157,11 +1232,12 @@ Return a JSON object with this exact shape (6–8 entries; ids UML-001, UML-002,
   ]
 }
 
-CONTENT REQUIREMENTS (accuracy matters as much as syntax — the diagrams must reflect THIS system):
-- Use-case diagram: include a use case for EACH major functional requirement below, connected to the actor(s) who perform it — NOT one generic action per actor.
-- Class diagram: include EVERY important domain entity the system manages (the core data/nouns in the requirements), each with its key attributes and the relationships between entities. Do not omit central entities.
-- Sequence diagram: model ONE core end-to-end business flow (the system's most important user story) with its real steps — NOT a generic login flow.
-- Ground everything in the specific requirements, actors, and entities provided; avoid generic placeholders.
+CONTENT REQUIREMENTS (accuracy matters as much as syntax — the diagrams must reflect THIS system and stay consistent with the requirements):
+- Use-case diagram: include a use case for EACH major functional requirement below, and connect each use case ONLY to the actor(s) who actually perform it per the requirements. Do NOT wire every actor to every use case, and do NOT assign an action to an actor who would not perform it (e.g. a performer does not "call cues live" if that is the stage manager's job).
+- Class & ER diagrams: include EVERY important domain entity the system manages — derive the nouns from BOTH the requirements AND the screen list below (e.g. distinct records, schedules, line-items, sign-in/attendance logs, reports). Do not omit central entities; give each its key attributes and the relationships/cardinalities between them.
+- Sequence diagram(s): model a real end-to-end flow from the requirements using the ACTUAL actors and system components described. Do NOT invent integrations the requirements never mention (e.g. the system directly driving lighting/sound/hardware) — route interactions through the real roles and components (e.g. signals sent to crew devices), and avoid a generic login flow.
+- Keep all diagrams mutually consistent and faithful to the functional requirements — the same actors, entities, and responsibilities must appear across the diagrams as in the SRS.
+- Ground everything in the specific requirements, actors, entities, and screens provided; avoid generic placeholders.
 
 STRICT Mermaid syntax rules:
 1. use_case: flowchart TD; actors as ((Label)), use cases as [Label], arrows -->

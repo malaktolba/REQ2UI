@@ -25,21 +25,33 @@ jest.mock("../services/groq.service", () => ({
   }),
 }));
 
+// Gemini now writes the capability-critical text stages (2/5/6/9) plus the
+// Stage-10 design system, so its JSON mock is prompt-aware like the Groq one:
+// stage-appropriate SRS JSON when a stage phrase matches, else a design-system
+// object for the Stage-10 design pass.
 jest.mock("../services/gemini.service", () => ({
-  callGeminiJSON: jest.fn(async () => ({
-    navbar: "<nav>...</nav>", footer: "<footer>...</footer>",
-    tailwind_config: "<script></script>", body_classes: "bg-slate-950",
-  })),
+  callGeminiJSON: jest.fn(async (system: string) => {
+    if (/IEEE 830 functional/i.test(system)) return SAMPLE_SRS.functional_requirements;
+    if (/IEEE 829 functional test/i.test(system)) return SAMPLE_SRS.functional_test_cases;
+    if (/security test cases/i.test(system)) return SAMPLE_SRS.security_test_cases;
+    if (/UML diagrams/i.test(system)) return SAMPLE_SRS.uml_diagrams;
+    return {
+      navbar: "<nav>...</nav>", footer: "<footer>...</footer>",
+      body_classes: "bg-slate-950", components: {}, sample_data: {},
+    };
+  }),
   callGeminiText: jest.fn(async () =>
     "<!DOCTYPE html><html><body><nav></nav><main>screen</main></body></html>"),
 }));
 
 import { sql } from "../db/client";
 import { callGroq } from "../services/groq.service";
+import { callGeminiJSON } from "../services/gemini.service";
 import { runPipeline } from "../services/pipeline.service";
 
 const mockSql = sql as jest.MockedFunction<any>;
 const mockGroq = callGroq as jest.MockedFunction<any>;
+const mockGemini = callGeminiJSON as jest.MockedFunction<any>;
 
 /** Collect stage events and the wall-clock duration of each stage. */
 function recorder() {
@@ -88,9 +100,14 @@ describe("runPipeline — full run", () => {
 
 describe("runPipeline — Stage 2 floor check", () => {
   it("fails when too few functional requirements can be derived", async () => {
+    // Stage 1 (extraction) runs on Groq; Stage 2 (functional requirements) now
+    // runs on Gemini — so the thin-FR response must come from the Gemini mock.
     mockGroq.mockImplementation(async (system: string) => {
-      if (/IEEE 830 functional/i.test(system)) return { requirements: [{ id: "FR-001", title: "x" }] };
       if (/system_summary/.test(system) || /requirement extraction/i.test(system)) return SAMPLE_SRS.extraction;
+      return {};
+    });
+    mockGemini.mockImplementation(async (system: string) => {
+      if (/IEEE 830 functional/i.test(system)) return { requirements: [{ id: "FR-001", title: "x" }] };
       return {};
     });
     const { events, emit } = recorder();

@@ -55,7 +55,7 @@ VITE_API_BASE_URL=    # leave empty for local dev; Vite proxy handles /api
 - **Frontend**: React 18, TypeScript, Tailwind CSS v4, Vite, React Router 7, Axios
 - **Backend**: Node.js, Express 4, TypeScript
 - **Database**: PostgreSQL via `@neondatabase/serverless` (Neon)
-- **AI**: Groq SDK (`llama-3.3-70b-versatile`) for stages 1–9; Google Gemini 2.5 Flash-Lite for stage 10 (UI code)
+- **AI**: Groq SDK (`llama-3.3-70b-versatile` / `llama-3.1-8b-instant`) for stages 1, 3, 4, 7, 8; Google Gemini (Flash-Lite chain) for the capability-critical text stages 2, 5, 6, 9 and for stage 10 (UI code). Per-stage provider/model is configured in `STAGE_PROVIDER`/`STAGE_MODEL` in `pipeline.service.ts`; Gemini-routed stages fall back to their Groq model on a Gemini outage.
 - **Export**: LaTeX → PDF via Tectonic (compiled server-side), docx.js, csv-writer, resvg-js (SVG→PNG)
 - **Deployment**: Vercel (frontend) + Render (backend)
 
@@ -66,14 +66,14 @@ VITE_API_BASE_URL=    # leave empty for local dev; Vite proxy handles /api
 | Stage | Output | LLM |
 |-------|--------|-----|
 | 1 | Requirement extraction (actors, summary) | Groq |
-| 2 | Functional requirements (IEEE 830) | Groq |
+| 2 | Functional requirements (IEEE 830) | Gemini (Groq fallback) |
 | 3 | Non-functional requirements | Groq |
 | 4 | Security requirements (OWASP Top 10) | Groq |
-| 5 | Functional test cases (IEEE 829) | Groq |
-| 6 | Security test cases | Groq |
+| 5 | Functional test cases (IEEE 829) | Gemini (Groq fallback) |
+| 6 | Security test cases | Gemini (Groq fallback) |
 | 7 | UI wireframe descriptions | Groq |
 | 8 | Traceability matrix | Groq |
-| 9 | UML diagrams — 6–8 across multiple types (use case, class, ER, sequence, activity, state, component) as Mermaid | Groq |
+| 9 | UML diagrams — 6–8 across multiple types (use case, class, ER, sequence, activity, state, component) as Mermaid | Gemini (Groq fallback) |
 | 10 | UI HTML code (multipass: design system + per-screen) | Gemini |
 
 Pipeline is streamed to the frontend via **SSE** at `GET /api/projects/:id/generate?token=<jwt>`. Each stage upserts to the `artifacts` table (JSONB `content`). Stage progress is tracked in `pipeline_stages`.
