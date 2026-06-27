@@ -242,7 +242,7 @@ End Users are the main beneficiaries of the system. They include software develo
 \noindent\textbf{System Interactions (Use Cases):} Register / Login, Create Project, View SRS, View UI Prototype, View Test Cases, Export Artifacts.
 
 \subsection{System Administrator (Secondary Stakeholder)}
-The System Administrator is responsible for managing and maintaining the system's operational integrity. This stakeholder ensures system availability, monitors usage, and manages user accounts. Administrative functionality is primarily focused on system-level maintenance rather than direct artifact generation.
+The System Administrator is responsible for managing and maintaining the system's operational integrity and for overseeing the quality of what the platform produces. Through a dedicated, access-gated analytics dashboard (Section~6.6), this stakeholder monitors platform-wide usage (user, project, and status counts), the mean GEval quality score with its per-artifact breakdown and grade distribution, and per-stage, end-to-end, and per-model generation timing, with built-in and Bring-Your-Own-Key runs reported separately. The administrator also manages user accounts and ensures system availability. Administrative functionality is observability- and maintenance-focused rather than involving direct artifact generation.
 
 \noindent\textbf{Goals and Interests:} ensure system stability and availability; monitor usage and performance; manage user accounts and permissions; maintain system configuration.
 
@@ -446,7 +446,7 @@ FR21 & Test Case Export Formats & Medium & The system shall allow users to expor
 \subsection{System Integration and Administration}
 \begin{reqtable}{Functional requirements -- system integration and administration}
 FR22 & Artifact Consistency Management & High & The system shall maintain consistency between SRS documents, UI prototypes, and test cases when updates occur. \\
-FR23 & Administrative Dashboard & Low & The system shall provide administrative features for monitoring system usage and managing users. \\
+FR23 & Administrative Analytics Dashboard & Medium & The system shall provide an access-gated administrative dashboard that reports platform usage, GEval quality scores (overall, per-artifact, and grade distribution), and per-stage, end-to-end, and per-model generation timing, and that supports user-account management. \\
 \end{reqtable}
 
 \section{Non-Functional Requirements}
