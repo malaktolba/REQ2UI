@@ -23,6 +23,14 @@
 \usepackage{setspace}
 \usepackage{fancyhdr}
 \usepackage[hidelinks]{hyperref}
+\usepackage{microtype}            % better justification; reduces overfull lines
+\usepackage{url}
+% Allow long \texttt{} tokens and URLs to break across lines so they never run
+% past the right margin (fixes text spilling outside the page border).
+\renewcommand{\UrlBreaks}{\do\/\do\-\do\_\do\.\do\=\do\&\do\?\do\:}
+\Urlmuskip=0mu plus 1mu\relax
+\setlength{\emergencystretch}{3em}
+\sloppy
 
 \definecolor{accent}{HTML}{2F5C8F}
 \captionsetup{font=small,labelfont=bf}
@@ -38,10 +46,11 @@
 % Helper column types
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 
-% Requirement table helper
-\newenvironment{reqtable}[1]{%
+% Requirement table helper. Optional first arg = \label key; second = caption.
+\newenvironment{reqtable}[2][]{%
+  \def\reqlbl{#1}%
   \begin{longtable}{L{1.6cm} L{4.2cm} L{2cm} L{6cm}}
-  \caption{#1}\\
+  \caption{#2}\ifx\reqlbl\empty\else\label{#1}\fi\\
   \toprule
   \textbf{ID} & \textbf{Requirement} & \textbf{Priority} & \textbf{Description} \\
   \midrule
@@ -91,11 +100,19 @@ Dr. Salma Radwan Abdel-Hamid\par}
 \end{titlepage}
 
 % ----------------------- FRONT MATTER -----------------------
+% The title page is counted as page i (its number is suppressed by the
+% titlepage environment); roman front-matter numbering therefore starts the
+% Abstract at ii, as required.
 \pagenumbering{roman}
+\setcounter{page}{2}
 
 \chapter*{Abstract}
 \addcontentsline{toc}{chapter}{Abstract}
-This thesis presents Req2UI, an AI-powered platform that automatically transforms a single natural-language software project description into a complete set of software-engineering artifacts. At its core is a ten-stage AI pipeline that produces an IEEE~830 Software Requirements Specification---functional, non-functional, and OWASP Top~10--aligned security requirements---together with IEEE~829 functional and security test cases, a requirements traceability matrix, six to eight UML diagrams spanning multiple diagram types, and runnable HTML/Tailwind UI code, all exportable as PDF, DOCX, LaTeX, and CSV. Security is embedded from the requirements phase: the system detects security-sensitive features such as authentication, payment, and data-upload flows and generates the corresponding controls and tests automatically, bringing security and testing concerns forward in the software development lifecycle. Beyond generation, the platform contributes a per-stage \emph{multi-provider routing} scheme that places each artifact on the language model (Groq or Google~Gemini) that an independent evaluation showed best suits it; an independent \emph{GEval} (LLM-as-a-Judge) quality layer that grades every generation; \emph{Bring-Your-Own-Key} support that lets users run the pipeline on their own provider account with the key encrypted at rest; and an admin analytics dashboard that surfaces quality, timing, and per-model metrics live. The delivered system was evaluated through an automated suite of 124 backend tests and the built-in GEval evaluator, achieving an overall quality score of 82.5\% (UI code highest at 95\%) with a mean end-to-end generation time of approximately 116~seconds. The results show that an integrated, security-aware pipeline can produce consistent, standards-conformant documentation while substantially reducing manual effort.
+Producing a complete, standards-conformant Software Requirements Specification (SRS) is one of the most time-consuming, error-prone, and frequently neglected activities in early-stage software engineering, and existing tools address only isolated fragments of it: requirements documentation, UI prototyping, or test generation in separate, disconnected silos. This thesis presents Req2UI, an AI-powered platform that closes that gap by transforming a single natural-language project description into a complete, traceable set of software-engineering artifacts through one integrated, security-aware pipeline.
+
+At its core is a ten-stage pipeline that produces an IEEE~830 SRS---functional, non-functional, and OWASP Top~10--aligned security requirements---together with IEEE~829 functional and security test cases, a requirements traceability matrix, six to eight UML diagrams spanning multiple diagram types, and runnable HTML/Tailwind UI code, all exportable as PDF, DOCX, LaTeX, and CSV. A distinguishing strength of the platform is that security is treated as a first-class concern from the requirements phase: the system detects security-sensitive features such as authentication, payment, and data-upload flows and automatically generates the corresponding controls and tests, shifting security and testing left in the development lifecycle.
+
+The work makes four principal contributions beyond generation. First, a per-stage multi-provider routing scheme places each artifact on the language model (Groq or Google~Gemini) that an independent evaluation showed best suits it, with automatic cross-provider fallback for resilience. Second, an independent GEval (LLM-as-a-Judge) quality layer grades every generation against a version-controlled rubric, giving a reproducible, semantic quality figure rather than an anecdotal one. Third, Bring-Your-Own-Key support lets users run the entire pipeline on their own provider account with the API key encrypted at rest using authenticated encryption. Fourth, an admin analytics dashboard surfaces quality, timing, and per-model metrics live. The delivered system was validated through an automated suite of 124 backend tests and the built-in GEval evaluator, achieving an overall quality score of 82.5\% (with UI code highest at 95\%) and a mean end-to-end generation time of approximately 116~seconds for inputs up to 5{,}000 characters. These results demonstrate that a single, integrated, security-aware pipeline can produce consistent, standards-conformant documentation while substantially reducing the manual effort and inconsistency of traditional requirements engineering.
 
 \chapter*{Acknowledgment}
 \addcontentsline{toc}{chapter}{Acknowledgment}
@@ -114,6 +131,9 @@ Special thanks go to our families and friends for their continuous support, pati
 % ----------------------- ABBREVIATIONS -----------------------
 \chapter*{Abbreviations}
 \addcontentsline{toc}{chapter}{Abbreviations}
+% This front-matter list is intentionally NOT a numbered \caption{}'d table:
+% a caption here would be typeset as "Table 0.1" (no chapter number yet) and
+% wrongly added to the List of Tables. The chapter heading above is its title.
 \begin{longtable}{L{3cm} L{10cm}}
 \toprule
 \textbf{Abbreviation} & \textbf{Description} \\
@@ -125,26 +145,45 @@ API & Application Programming Interface \\
 ASVS & Application Security Verification Standard \\
 BYOK & Bring Your Own Key \\
 CI/CD & Continuous Integration / Continuous Deployment \\
+CORS & Cross-Origin Resource Sharing \\
 CRUD & Create, Read, Update, Delete \\
+CSS & Cascading Style Sheets \\
+CSV & Comma-Separated Values \\
+DOCX & Office Open XML Document (Microsoft Word) \\
+ER & Entity--Relationship \\
+FR & Functional Requirement \\
+GCM & Galois/Counter Mode \\
 GUI & Graphical User Interface \\
 HTML & HyperText Markup Language \\
+HTTP & HyperText Transfer Protocol \\
 IEEE & Institute of Electrical and Electronics Engineers \\
+IQR & Interquartile Range \\
 JSON & JavaScript Object Notation \\
 JWT & JSON Web Token \\
+KPI & Key Performance Indicator \\
 LLM & Large Language Model \\
-NLP & Natural Language Processing \\
 NFR & Non-Functional Requirement \\
-OWASP & Open Web Application Security Project \\
+NLP & Natural Language Processing \\
+OWASP & Open Worldwide Application Security Project \\
 PDF & Portable Document Format \\
+PNG & Portable Network Graphics \\
 REST & Representational State Transfer \\
+RTM & Requirements Traceability Matrix \\
 SDLC & Software Development Life Cycle \\
+SPA & Single-Page Application \\
+SQL & Structured Query Language \\
+SR & Security Requirement \\
 SRS & Software Requirements Specification \\
 SSE & Server-Sent Events \\
+SVG & Scalable Vector Graphics \\
+TLS & Transport Layer Security \\
 UI & User Interface \\
 UML & Unified Modeling Language \\
+UUID & Universally Unique Identifier \\
 UX & User Experience \\
+WCAG & Web Content Accessibility Guidelines \\
+XSS & Cross-Site Scripting \\
 \bottomrule
-\caption{Abbreviations}
 \end{longtable}
 
 % ----------------------- MAIN MATTER -----------------------
@@ -182,10 +221,10 @@ The current challenge in software engineering lies in the manual, repetitive, an
 \end{itemize}
 
 \section{Constraints}
-The proposed Automated SRS Generator is subject to a set of realistic project constraints that limit the scope and implementation of the system. These constraints are aligned with the defined non-functional requirements and the academic nature of the project.
+The proposed Automated SRS Generator is subject to a set of realistic project constraints that limit the scope and implementation of the system. These constraints are aligned with the defined non-functional requirements and the academic nature of the project, and are summarised in Table~\ref{tab:constraints}.
 
 \begin{longtable}{L{3.5cm} L{9.5cm}}
-\caption{System constraints}\\
+\caption{System constraints}\label{tab:constraints}\\
 \toprule
 \textbf{Constraint Type} & \textbf{Description} \\
 \midrule
@@ -198,10 +237,10 @@ Hardware Constraint & Development and testing are performed on standard personal
 \end{longtable}
 
 \section{Standards}
-This project is written according to the IEEE 12207 standard, which specifies requirements-specification standards (IEEE 830, shown in Chapter 4), UML, design standards, software process models, implementation standards, and testing standards (IEEE 829, shown in Chapter 7).
+This project is written according to the IEEE 12207 standard~\cite{ref10}, which specifies requirements-specification standards (IEEE~830~\cite{ref8}, shown in Chapter 4), UML, design standards, software process models, implementation standards, and testing standards (IEEE~829~\cite{ref9}, shown in Chapter 7). Security follows the OWASP Top~10~\cite{ref11}. Table~\ref{tab:standards} lists the standards applied and where each is referenced in this document.
 
 \begin{longtable}{L{6.5cm} L{6.5cm}}
-\caption{Standards}\\
+\caption{Standards}\label{tab:standards}\\
 \toprule
 \textbf{Standard} & \textbf{Reference in the Document} \\
 \midrule
@@ -215,8 +254,10 @@ OWASP (implementation standard) & Chapter 6 \\
 \end{longtable}
 
 \section{Business Canvas}
+The business model canvas in Table~\ref{tab:business} summarises how the platform delivers and captures value across the nine standard building blocks.
+
 \begin{longtable}{L{4cm} L{9cm}}
-\caption{Business model}\\
+\caption{Business model}\label{tab:business}\\
 \toprule
 \textbf{Block} & \textbf{Description} \\
 \midrule
@@ -269,7 +310,7 @@ This chapter presents a comprehensive background of the key theoretical and tech
 A Software Requirements Specification (SRS) is a core artifact in software engineering that formally describes what a software system is expected to do and the constraints under which it must operate. Since the proposed project focuses on automatically generating SRS documents from natural-language input, a clear understanding of SRS concepts, structure, and challenges is essential.
 
 \subsection{Definition of Software Requirements Specification}
-An SRS is a structured and formal document that captures the complete set of functional requirements, non-functional requirements, and security requirements of a software system. Functional requirements describe the services and behaviors the system must provide, while non-functional requirements define quality attributes such as performance, usability, reliability, and scalability. Security requirements specify controls and safeguards needed to protect the system from potential threats. The SRS serves as a single source of truth for all stakeholders.
+An SRS is a structured and formal document that captures the complete set of functional requirements, non-functional requirements, and security requirements of a software system, as defined by the IEEE~830 recommended practice~\cite{ref8} and elaborated in standard software-engineering texts~\cite{ref18,ref19}. Functional requirements describe the services and behaviors the system must provide, while non-functional requirements define quality attributes such as performance, usability, reliability, and scalability. Security requirements specify controls and safeguards needed to protect the system from potential threats. The SRS serves as a single source of truth for all stakeholders.
 
 \subsection{Importance of SRS in the Software Development Life Cycle}
 The SRS plays a critical role across all phases of the SDLC. During planning and analysis, it helps stakeholders agree on system scope, objectives, and constraints. In design and implementation, it guides architectural decisions and coding. During testing and validation, it acts as a baseline for creating test cases. Finally, during maintenance, it supports system evolution by enabling traceability between requirements, code, and tests.
@@ -290,7 +331,7 @@ In the proposed system, natural-language user input is automatically transformed
 AI has increasingly been adopted in requirements engineering to address the complexity and limitations of manual requirement analysis. AI techniques, particularly NLP and large language models, enable systems to interpret unstructured textual input and transform it into structured representations.
 
 \subsection{Role and Advantages of AI in Requirements Engineering}
-AI-based approaches allow automated analysis of stakeholder requirements expressed in natural language. NLP techniques can identify key entities, actions, constraints, and quality attributes. Large Language Models (LLMs) further enhance this capability by understanding contextual relationships and generating coherent, standardized requirement statements, reducing ambiguity and improving completeness.
+AI-based approaches allow automated analysis of stakeholder requirements expressed in natural language. NLP techniques can identify key entities, actions, constraints, and quality attributes. Large Language Models (LLMs), built on the transformer architecture~\cite{ref13} and the few-shot learning paradigm~\cite{ref14}, further enhance this capability by understanding contextual relationships and generating coherent, standardized requirement statements, reducing ambiguity and improving completeness. Models trained on source code extend this to generating runnable software directly from natural-language descriptions~\cite{ref15,ref3}.
 
 \subsection{Use of AI in the Proposed System}
 The proposed system leverages AI to automatically extract functional, non-functional, and security requirements from user-provided descriptions. It identifies security-sensitive components such as authentication, data storage, and access control, generates structured SRS documents, and derives corresponding test cases.
@@ -315,27 +356,50 @@ The proposed system embeds security from the requirements stage by automatically
 \subsection{Benefits of Integrating Security Early}
 Early integration of security practices results in more robust and resilient systems, fewer vulnerabilities, lower remediation costs, and improved compliance with security standards and regulations.
 
+\section{Evaluation and Quality-Assurance Tools}
+Because the proposed system is assessed against measurable non-functional targets (Section~4.3) and through a dedicated quality layer (Chapter~7), this section introduces the categories of tools and techniques used in that assessment so that their later use is self-contained.
+
+\subsection{Performance and Load Testing}
+Performance testing measures response time, throughput, and behaviour under concurrency. \emph{Apache JMeter}, \emph{k6}, \emph{Locust}, \emph{Artillery}, and \emph{LoadRunner} are widely used load generators that simulate many concurrent virtual users and report latency percentiles and error rates, while \emph{Postman} is an API client used to verify the correctness and timing of individual request--response interactions.
+
+\subsection{Security Assessment}
+Dynamic application security testing (DAST) tools probe a running application for common web vulnerabilities. \emph{OWASP ZAP} (Zed Attack Proxy) is an open-source DAST scanner, maintained by the OWASP community, that automatically detects issues aligned with the OWASP Top~10~\cite{ref11} such as injection, broken authentication, and security misconfiguration.
+
+\subsection{Usability and Accessibility}
+Usability tools such as \emph{Hotjar}, \emph{Microsoft Clarity}, \emph{UserTesting}, and \emph{Maze} capture interaction analytics (heatmaps, session recordings, task-completion rates) to quantify how easily users accomplish tasks. Accessibility tools---\emph{axe}, \emph{WAVE}, and \emph{pa11y}---automatically check an interface against the Web Content Accessibility Guidelines (WCAG~2.1), flagging contrast, keyboard-navigation, and screen-reader issues.
+
+\subsection{Availability and Error Monitoring}
+Uptime monitors such as \emph{UptimeRobot} and \emph{Pingdom} periodically probe a deployed service to measure availability, while error-tracking platforms such as \emph{Sentry} and \emph{LogRocket} aggregate runtime exceptions and failed requests to surface reliability problems in production.
+
+\subsection{LLM-as-a-Judge Evaluation}
+A more recent technique uses a strong language model to grade the output of another model against a rubric, providing a scalable, \emph{semantic} alternative to purely structural metrics. The G-Eval framework of Liu et al.~\cite{ref16} showed that GPT-4-based scoring correlates closely with human judgement, and Zheng et al.~\cite{ref17} validated this LLM-as-a-Judge paradigm at scale. This thesis adopts the approach in its GEval quality layer (Chapter~7).
+
 % ============================================================
 \chapter{Related Work and Similar Systems}
 \section{Related Work}
 This section reviews academic work and industry tools related to SRS automation, outlining the main research approaches and current commercial capabilities.
 
-\begin{itemize}[leftmargin=*]
-  \item \textbf{[1]} introduces a system that automatically generates web-based UI prototypes from UML requirements models. By analyzing use cases and class diagrams, the system produces functional UI layouts in HTML, reducing the gap between design and implementation.
-  \item \textbf{[2]} presents a comprehensive overview of common test automation frameworks (linear, modular, data-driven, keyword-driven, hybrid, BDD, and Page Object Model), analyzing their strengths and limitations and emphasizing that framework choice should match project goals and team expertise.
-  \item \textbf{[3]} Wei (2023) examines how LLMs can convert natural-language requirements directly into software code, presenting an end-to-end approach while noting the continued need for human oversight.
-  \item \textbf{[4]} surveys techniques for automatically generating software test cases (random, path-oriented, goal-oriented, and intelligent methods), highlighting model-based and specification-based strategies using UML diagrams.
-  \item \textbf{[5]} Fatima et al. propose an NLP-based framework to extract actions and conditions from natural-language requirements and convert them into executable test cases with high accuracy.
-  \item \textbf{[6]} Wang et al. (2019) transform use case specifications into test cases using NLP, ensuring coverage and traceability from requirements to testing.
-  \item \textbf{[7]} Alqarni et al. (2024) propose a system that uses machine learning to detect and generate security requirements from natural-language project descriptions.
-\end{itemize}
+The recent breakthroughs that make this project feasible rest on the transformer architecture introduced by Vaswani et al.~\cite{ref13}, which enabled the large language models that followed. Brown et al.~\cite{ref14} then showed that sufficiently large models can perform language tasks from only a few examples, and Chen et al.~\cite{ref15} demonstrated that such models, trained on source code, can generate functional programs from natural-language descriptions. Building directly on this capability for software engineering, Wei~\cite{ref3} examines how LLMs can convert natural-language requirements directly into software code in an end-to-end manner, while noting the continued need for human oversight.
+
+A related line of work targets the generation of design and interface artifacts from formal models. Matsuura et al.~\cite{ref1} automatically generate web-based UI prototypes from UML requirements models, analysing use cases and class diagrams to produce functional HTML layouts and thereby reducing the gap between design and implementation.
+
+Automated test-case generation is a mature research area. Pushparaj et al.~\cite{ref4} survey techniques for automatically generating software test cases---random, path-oriented, goal-oriented, and intelligent methods---highlighting model-based and specification-based strategies that exploit UML diagrams. Wang et al.~\cite{ref6} transform use-case specifications into system test cases using NLP while preserving coverage and traceability from requirements to testing, and Fatima et al.~\cite{ref5} propose an NLP-based framework that extracts actions and conditions from natural-language requirements and converts them into executable test cases with high accuracy. Complementing these academic methods, Khankhoje~\cite{ref2} reviews common test-automation frameworks (linear, modular, data-driven, keyword-driven, hybrid, BDD, and Page Object Model) and argues that framework choice should match project goals and team expertise.
+
+Security requirements have also begun to attract automated treatment. Batool et al.~\cite{ref7} propose a machine-learning system that detects and categorises software security requirements from natural-language project descriptions, a problem this work addresses by grounding generation in the OWASP Top~10~\cite{ref11}.
+
+Finally, the practice of using a strong language model as an automatic evaluator---the basis of the quality layer in this thesis---was established by Liu et al.~\cite{ref16}, whose G-Eval framework grades generated text with GPT-4 in close agreement with human judgement, and by Zheng et al.~\cite{ref17}, who validate the LLM-as-a-Judge paradigm at scale.
 
 \section{Similar Systems}
 Existing systems generally fall into four categories: requirements documentation tools (e.g., DOORS, Jama); AI-assisted requirement generators (e.g., Notion AI, ClickUp AI, GPT tools); automated UI prototyping tools (e.g., Uizard, Figma AI plugins); and automated test case generation tools (e.g., TestSigma, Katalon). Each category addresses part of the SDLC, but none provide an integrated pipeline covering Natural Language Input $\rightarrow$ SRS $\rightarrow$ UI Prototype $\rightarrow$ Functional + Security Test Cases.
 
 \subsection{Consolidated Comparison}
-\begin{longtable}{L{2.6cm} *{6}{L{1.3cm}} L{2.6cm}}
-\caption{Consolidated comparison of similar systems}\\
+Table~\ref{tab:comparison} consolidates the comparison across the seven feature dimensions, contrasting the existing systems with the proposed platform.
+
+\begingroup
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{L{2.3cm} *{6}{L{1.25cm}} L{2.3cm}}
+\caption{Consolidated comparison of similar systems}\label{tab:comparison}\\
 \toprule
 \textbf{System} & \textbf{Req. Gen.} & \textbf{Sec. Reqs} & \textbf{UI Proto.} & \textbf{Test Cases} & \textbf{NLP} & \textbf{Trace.} & \textbf{Overall Limitation} \\
 \midrule
@@ -351,6 +415,7 @@ Katalon Studio & No & No & No & Yes & No & No & Testing only \\
 \textbf{Proposed System} & Yes & Yes (OWASP) & Yes & Yes (F+S) & Yes (LLM) & Yes & Complete integrated pipeline \\
 \bottomrule
 \end{longtable}
+\endgroup
 
 \section{Research Gap}
 Although several tools and research projects address automation in requirements engineering, UI prototyping, and test-case generation, a number of critical gaps remain:
@@ -384,7 +449,7 @@ Evaluates project context to identify security implications, generates security 
 Translates functional requirements into low-fidelity UI prototypes, generates functional and security test suites, maintains bidirectional traceability between requirements, UI elements, and test cases, and provides multi-format export.
 
 \subsection{The Generation Pipeline}
-Internally, these four conceptual modules are realised as a \textbf{ten-stage generation pipeline} orchestrated by a single service. Each stage calls a large language model with a strict JSON contract and persists its output as a typed artifact. The stages are:
+Internally, these four conceptual modules are realised as a ten-stage generation pipeline orchestrated by a single service. Each stage calls a large language model with a strict JSON contract and persists its output as a typed artifact. The stages are:
 
 \begin{enumerate}[leftmargin=*,nosep]
   \item \textbf{Requirement Extraction} --- actors, system summary, and IEEE 830 narrative front-matter (abstract, motivation, scope, objectives, assumptions, constraints).
@@ -399,11 +464,14 @@ Internally, these four conceptual modules are realised as a \textbf{ten-stage ge
   \item \textbf{UI Code Generation} --- production-quality HTML/Tailwind pages.
 \end{enumerate}
 
-The pipeline uses \textbf{two language-model providers, routed per stage}. Most stages run on the Groq API (\texttt{llama-3.3-70b-versatile} for reasoning-heavy stages, \texttt{llama-3.1-8b-instant} for templated/derivative ones), while the capability-critical text stages---functional requirements (2), functional and security test cases (5--6), and UML diagrams (9)---together with UI code generation (10) are routed to Google Gemini (\texttt{gemini-3.1-flash-lite}), which an independent quality evaluation (Section~7.3) showed produces stronger results on exactly those artifacts. Each Gemini-routed stage transparently \emph{falls back} to its Groq model if Gemini is unavailable, so a provider outage costs quality on a single stage rather than aborting the run. Because later stages depend only on specific earlier ones, independent stages are executed concurrently (stages 3--5 together, then 6--7, then 8--10), reducing total generation time. Every artifact is upserted to the database keyed by \texttt{(project, type)}, so an interrupted run can be \emph{resumed}: stages whose artifact already exists are skipped rather than regenerated. Progress is streamed to the browser in real time using Server-Sent Events (SSE). Optionally, a user can supply their own provider key (Section~6.5), in which case every stage in their generation runs on the model they choose instead.
+The pipeline uses two language-model providers, routed per stage. Most stages run on the Groq API (\texttt{llama-3.3-70b-versatile} for reasoning-heavy stages, \texttt{llama-3.1-8b-instant} for templated/derivative ones), while the capability-critical text stages---functional requirements (2), functional and security test cases (5--6), and UML diagrams (9)---together with UI code generation (10) are routed to Google Gemini (\texttt{gemini-3.1-flash-lite}), which an independent quality evaluation (Section~7.3) showed produces stronger results on exactly those artifacts. Each Gemini-routed stage transparently \emph{falls back} to its Groq model if Gemini is unavailable, so a provider outage costs quality on a single stage rather than aborting the run. Because later stages depend only on specific earlier ones, independent stages are executed concurrently (stages 3--5 together, then 6--7, then 8--10), reducing total generation time. Every artifact is upserted to the database keyed by \texttt{(project, type)}, so an interrupted run can be \emph{resumed}: stages whose artifact already exists are skipped rather than regenerated. Progress is streamed to the browser in real time using Server-Sent Events (SSE). Optionally, a user can supply their own provider key (Section~6.5), in which case every stage in their generation runs on the model they choose instead.
 
 \section{Functional Requirements}
+The functional requirements are grouped into six functional areas and presented, following IEEE~830, in Tables~\ref{tab:fr-user}--\ref{tab:fr-admin}. Each requirement is given an identifier (FR\textit{n}), a priority, and a testable description.
+
 \subsection{User Management and Project Handling}
-\begin{reqtable}{Functional requirements -- user management and project handling}
+Table~\ref{tab:fr-user} lists the requirements covering account access and project handling.
+\begin{reqtable}[tab:fr-user]{Functional requirements -- user management and project handling}
 FR1 & User Registration and Authentication & Medium & The system shall allow users to create accounts and log in securely using email and password or third-party authentication services. \\
 FR2 & Project Creation and Management & High & The system shall allow users to create, view, edit, and delete projects along with basic project information. \\
 FR3 & Project Description Input & Critical & The system shall allow users to enter natural-language project descriptions with a maximum length of 5000 characters. \\
@@ -411,7 +479,8 @@ FR4 & Input Validation and Feedback & Medium & The system shall validate user in
 \end{reqtable}
 
 \subsection{SRS Generation and Management}
-\begin{reqtable}{Functional requirements -- SRS generation and management}
+The requirements governing SRS generation, editing, traceability, and export are given in Table~\ref{tab:fr-srs}.
+\begin{reqtable}[tab:fr-srs]{Functional requirements -- SRS generation and management}
 FR5 & Automated SRS Generation & Critical & The system shall automatically generate an SRS document containing functional, non-functional, and security requirements based on the provided input. \\
 FR6 & Requirement Categorization & High & The system shall categorize generated requirements into functional and non-functional types. \\
 FR7 & SRS Editing and Refinement & High & The system shall allow users to edit and refine the generated SRS through an interactive interface. \\
@@ -420,7 +489,8 @@ FR9 & SRS Export Options & Medium & The system shall allow users to export SRS d
 \end{reqtable}
 
 \subsection{Security Analysis and Requirements}
-\begin{reqtable}{Functional requirements -- security analysis}
+Table~\ref{tab:fr-sec} captures the requirements for security feature identification, OWASP-aligned generation, gap analysis, and risk assessment.
+\begin{reqtable}[tab:fr-sec]{Functional requirements -- security analysis}
 FR10 & Security Feature Identification & Critical & The system shall identify security-related features such as authentication and data handling from project descriptions. \\
 FR11 & Security Requirement Generation & High & The system shall generate security requirements aligned with OWASP Top 10 guidelines. \\
 FR12 & Security Gap Analysis & High & The system shall analyze generated requirements and identify missing security controls with recommendations. \\
@@ -428,7 +498,8 @@ FR13 & Security Risk Assessment & Medium & The system shall assign a basic risk 
 \end{reqtable}
 
 \subsection{UI Prototype Generation}
-\begin{reqtable}{Functional requirements -- UI prototype generation}
+The UI prototype generation requirements are listed in Table~\ref{tab:fr-ui}.
+\begin{reqtable}[tab:fr-ui]{Functional requirements -- UI prototype generation}
 FR14 & Automated Wireframe Generation & High & The system shall generate low-fidelity UI wireframes based on functional requirements. \\
 FR15 & Requirement to UI Mapping & High & The system shall map functional requirements to appropriate UI components. \\
 FR16 & UI Preview and Interaction & Medium & The system shall provide an interactive preview of generated UI prototypes. \\
@@ -436,7 +507,8 @@ FR17 & UI Export Options & Medium & The system shall allow users to export UI pr
 \end{reqtable}
 
 \subsection{Test Case Generation}
-\begin{reqtable}{Functional requirements -- test case generation}
+Table~\ref{tab:fr-test} lists the functional and security test-case generation, organization, and export requirements.
+\begin{reqtable}[tab:fr-test]{Functional requirements -- test case generation}
 FR18 & Functional Test Case Generation & High & The system shall generate functional test cases for each functional requirement. \\
 FR19 & Security Test Case Generation & High & The system shall generate security test cases based on security requirements and OWASP guidelines. \\
 FR20 & Test Case Organization & Medium & The system shall organize generated test cases into structured test suites. \\
@@ -444,7 +516,8 @@ FR21 & Test Case Export Formats & Medium & The system shall allow users to expor
 \end{reqtable}
 
 \subsection{System Integration and Administration}
-\begin{reqtable}{Functional requirements -- system integration and administration}
+Finally, Table~\ref{tab:fr-admin} gives the artifact-consistency and administrative-dashboard requirements.
+\begin{reqtable}[tab:fr-admin]{Functional requirements -- system integration and administration}
 FR22 & Artifact Consistency Management & High & The system shall maintain consistency between SRS documents, UI prototypes, and test cases when updates occur. \\
 FR23 & Administrative Analytics Dashboard & Medium & The system shall provide an access-gated administrative dashboard that reports platform usage, GEval quality scores (overall, per-artifact, and grade distribution), and per-stage, end-to-end, and per-model generation timing, and that supports user-account management. \\
 \end{reqtable}
@@ -512,7 +585,7 @@ FR23 & Administrative Analytics Dashboard & Medium & The system shall provide an
 \section{UML Diagrams}
 
 \subsection{Architecture Diagram}
-The system adopts a layered architecture composed of presentation, application, and data layers. Users interact through a web-based interface to submit project descriptions and retrieve generated artifacts. The application layer processes input and orchestrates a ten-stage pipeline that generates SRS documents, security requirements, UI wireframes, UI code, and test cases, then independently grades the result. External LLM services (Groq and Google Gemini, routed per stage---or a user's own provider) are integrated, and all project data is stored in a managed PostgreSQL database (Neon).
+As shown in Figure~\ref{fig:architecture}, the system adopts a layered architecture composed of presentation, application, and data layers. Users interact through a web-based interface to submit project descriptions and retrieve generated artifacts. The application layer processes input and orchestrates a ten-stage pipeline that generates SRS documents, security requirements, UI wireframes, UI code, and test cases, then independently grades the result. External LLM services (Groq and Google Gemini, routed per stage---or a user's own provider) are integrated, and all project data is stored in a managed PostgreSQL database (Neon).
 
 \begin{figure}[ht]
   \centering
@@ -522,7 +595,7 @@ The system adopts a layered architecture composed of presentation, application, 
 \end{figure}
 
 \subsection{System Context Diagram}
-The Req2UI system operates as a central system that interacts with users, administrators, and external services. Users submit natural-language project descriptions and receive generated SRS documents, UI prototypes, and test cases. The system integrates with two language-model providers---the Groq API and the Google Gemini API---routed per pipeline stage, and the OWASP Top 10 knowledge base for security analysis. Administrators consult an analytics dashboard, and users may optionally connect their own AI-provider key.
+As depicted in Figure~\ref{fig:context}, the Req2UI system operates as a central system that interacts with users, administrators, and external services. Users submit natural-language project descriptions and receive generated SRS documents, UI prototypes, and test cases. The system integrates with two language-model providers---the Groq API and the Google Gemini API---routed per pipeline stage, and the OWASP Top 10 knowledge base for security analysis. Administrators consult an analytics dashboard, and users may optionally connect their own AI-provider key.
 
 \begin{figure}[ht]
   \centering
@@ -532,7 +605,7 @@ The Req2UI system operates as a central system that interacts with users, admini
 \end{figure}
 
 \subsection{Class Diagram}
-This class diagram shows the structural design of the system. The \texttt{Project} class is the central entity that groups all generated artifacts. Users can create multiple projects. Artifacts are typed (functional/non-functional/security requirements, test cases, wireframes, traceability, UML, and UI code). Service classes such as the Pipeline Service, Gemini Service, and Export Service operate on the project data but do not own it, ensuring separation of concerns and maintainability.
+The class diagram in Figure~\ref{fig:class} shows the structural design of the system. The \texttt{Project} class is the central entity that groups all generated artifacts. Users can create multiple projects. Artifacts are typed (functional/non-functional/security requirements, test cases, wireframes, traceability, UML, and UI code). Service classes such as the Pipeline Service, Gemini Service, and Export Service operate on the project data but do not own it, ensuring separation of concerns and maintainability.
 
 \begin{figure}[ht]
   \centering
@@ -542,7 +615,7 @@ This class diagram shows the structural design of the system. The \texttt{Projec
 \end{figure}
 
 \subsection{Use Case Diagram}
-The use case diagram captures the primary interactions between the End User and the system---registration/login, project management, artifact generation (which includes requirement, test-case, and UI-code generation), reviewing and refining artifacts, previewing UI code, and exporting---as well as the administrator's monitoring and user-management responsibilities.
+The use case diagram in Figure~\ref{fig:usecase} captures the primary interactions between the End User and the system---registration/login, project management, artifact generation (which includes requirement, test-case, and UI-code generation), reviewing and refining artifacts, previewing UI code, and exporting---as well as the administrator's monitoring and user-management responsibilities.
 
 \begin{figure}[ht]
   \centering
@@ -552,7 +625,7 @@ The use case diagram captures the primary interactions between the End User and 
 \end{figure}
 
 \subsection{Sequence Diagram}
-This sequence diagram describes the flow of interactions when a user generates artifacts. The request opens a Server-Sent Events (SSE) stream; the pipeline runs the ten stages---each against its routed provider (Groq or Gemini, Section~4.1.5)---persisting each artifact and streaming progress, then runs stage 10 to produce the design system and per-screen UI code before the artifacts viewer is rendered. After the pipeline completes, an independent quality judge grades the artifacts and the score is streamed as a final event.
+The sequence diagram in Figure~\ref{fig:sequence} describes the flow of interactions when a user generates artifacts. The request opens a Server-Sent Events (SSE) stream; the pipeline runs the ten stages---each against its routed provider (Groq or Gemini, Section~4.1.5)---persisting each artifact and streaming progress, then runs stage 10 to produce the design system and per-screen UI code before the artifacts viewer is rendered. After the pipeline completes, an independent quality judge grades the artifacts and the score is streamed as a final event.
 
 \begin{figure}[ht]
   \centering
@@ -562,7 +635,7 @@ This sequence diagram describes the flow of interactions when a user generates a
 \end{figure}
 
 \subsection{Activity Diagram}
-This activity diagram shows the end-to-end workflow of the system. It starts with user authentication and project setup, followed by input submission and validation. The pipeline then generates functional, non-functional, and security requirements, test cases, wireframes, UML, and UI code. Finally, the user reviews the results and exports the generated artifacts before returning to the dashboard.
+The activity diagram in Figure~\ref{fig:activity} shows the end-to-end workflow of the system. It starts with user authentication and project setup, followed by input submission and validation. The pipeline then generates functional, non-functional, and security requirements, test cases, wireframes, UML, and UI code. Finally, the user reviews the results and exports the generated artifacts before returning to the dashboard.
 
 \begin{figure}[ht]
   \centering
@@ -606,15 +679,29 @@ The implemented web application provides the following primary screens, which co
 \end{itemize}
 Across all screens the application follows a single, consistent visual design language and adapts automatically to the operating system's light/dark colour-scheme preference, which the user can override at any time; the choice is remembered between sessions.
 
-% TODO: insert prototype screenshots of the above screens (captured from the running application).
-\noindent\textit{Screenshots of the running application are inserted here.}
+\subsection{Screenshots of the Running System}
+The following figures are captured from the deployed application. Figure~\ref{fig:screen-dashboard} shows the workspace dashboard, which lists the authenticated user's projects with their status and generated-artifact counts, and Figure~\ref{fig:screen-create} shows the create-project screen on which a user enters the natural-language description that drives the pipeline.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\linewidth]{screen_dashboard.png}
+  \caption{Workspace dashboard listing the user's projects with status badges and artifact counts.}
+  \label{fig:screen-dashboard}
+\end{figure}
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\linewidth]{screen_create.png}
+  \caption{Create-project screen, where the user supplies the natural-language project description.}
+  \label{fig:screen-create}
+\end{figure}
 
 % ============================================================
 \chapter{Implementation}
 This chapter describes how the system was built: the implementation environment and stack, the database schema, the AI generation pipeline, the authentication and security model, the export subsystem, and the deployment topology.
 
 \section{Implementation Environment}
-The system is implemented as a full-stack \textbf{TypeScript} application split into two deployable units within a single repository.
+The system is implemented as a full-stack TypeScript application split into two deployable units within a single repository.
 
 \begin{itemize}[leftmargin=*,nosep]
   \item \textbf{Frontend:} React 19, Vite, Tailwind CSS v4, React Router 7, and Axios. It is a single-page application (SPA) that communicates with the backend over a REST API and an SSE stream.
@@ -688,7 +775,7 @@ Two analytics layers observe the platform without altering any generated artifac
 \textbf{Admin analytics dashboard.} An internal, admin-gated dashboard (access controlled by the \texttt{is\_admin} flag and an email allowlist) aggregates platform-wide read-only statistics: user and project counts, project status mix, and---drawn directly from the \texttt{evaluations} and \texttt{pipeline\_stages} tables---the mean GEval accuracy with its per-artifact breakdown and grade distribution, per-stage and end-to-end generation timing, and per-model speed. Two robustness details make the numbers trustworthy: each project contributes only its \emph{latest} evaluation (re-runs don't double-count), and timing is cleaned with a hard 30-minute ceiling plus a Tukey IQR fence that excludes outlier runs from the averages. Built-in and Bring-Your-Own-Key runs are reported side by side so a user's own (possibly slower or faster) model never silently skews the built-in system's measured speed. This dashboard is the direct source of the evaluation figures reported in Section~7.3.
 
 \section{Export Subsystem}
-Generated artifacts are assembled into an IEEE 830 document structure (\texttt{ieeeSections}) and rendered to four formats: \textbf{PDF} (a thesis-styled IEEE 830 \texttt{report}---title page, front matter, colour-headed \texttt{xltabular} requirement tables, a UML chapter, and a UI appendix---compiled server-side to PDF with \textbf{Tectonic}, a single self-contained TeX engine that resolves the table of contents in one pass; on the plain Node host the binary is self-bootstrapped on first use, so PDF export needs no container), \textbf{DOCX} (docx.js with heading styles), \textbf{LaTeX} (the same \texttt{report} source, downloadable as raw \texttt{.tex} or as an Overleaf-ready \texttt{.zip} bundle with the rendered diagram figures, built via JSZip), and \textbf{CSV} (a flat export of requirements, test cases, and the traceability matrix). UML Mermaid diagrams captured client-side are rasterised to PNG via resvg-js and embedded as figures in the PDF and LaTeX outputs.
+Generated artifacts are assembled into an IEEE 830 document structure (\texttt{ieeeSections}) and rendered to four formats: PDF (a thesis-styled IEEE 830 \texttt{report}---title page, front matter, colour-headed \texttt{xltabular} requirement tables, a UML chapter, and a UI appendix---compiled server-side to PDF with Tectonic, a single self-contained TeX engine that resolves the table of contents in one pass; on the plain Node host the binary is self-bootstrapped on first use, so PDF export needs no container), DOCX (docx.js with heading styles), LaTeX (the same \texttt{report} source, downloadable as raw \texttt{.tex} or as an Overleaf-ready \texttt{.zip} bundle with the rendered diagram figures, built via JSZip), and CSV (a flat export of requirements, test cases, and the traceability matrix). UML Mermaid diagrams captured client-side are rasterised to PNG via resvg-js and embedded as figures in the PDF and LaTeX outputs.
 
 \section{Results and Discussion}
 The implemented system successfully realises the full pipeline envisioned in the objectives: from a single natural-language description it produces functional, non-functional, and OWASP-aligned security requirements; functional and security test cases; a traceability matrix; UML diagrams; and runnable UI code --- all exportable in four formats. The resumable, concurrent pipeline makes generation both faster and resilient to transient LLM failures, and the streaming UI gives users live feedback during a multi-minute generation. The principal practical constraint encountered was LLM rate limiting (particularly Gemini's free tier), which is mitigated through request throttling, backoff, and the resume mechanism rather than eliminated.
@@ -698,10 +785,10 @@ The implemented system successfully realises the full pipeline envisioned in the
 Testing the system spans two complementary levels: (i) the artifacts the system \emph{generates} for a user's project (the functional and security test cases produced by stages 5 and 6, documented in IEEE 829 form), and (ii) the verification of the platform itself through an automated unit/integration test suite. This chapter focuses on the latter, together with the evaluation strategy for the non-functional requirements.
 
 \section{Automated Test Suite}
-The backend is covered by a Jest test suite executed with \texttt{npm test} (\texttt{jest --runInBand}). The suite mocks the database, the language-model providers, and the token service so routes and services are tested in isolation, and uses \texttt{supertest} to drive the Express application. At the time of writing, the suite comprises \textbf{eleven test suites and 124 tests}.
+The backend is covered by a Jest test suite executed with \texttt{npm test} (\texttt{jest --runInBand}). The suite mocks the database, the language-model providers, and the token service so routes and services are tested in isolation, and uses \texttt{supertest} to drive the Express application. At the time of writing, the suite comprises eleven test suites and 124 tests, broken down by suite in Table~\ref{tab:testcoverage}.
 
 \begin{longtable}{L{3.4cm} L{1.4cm} L{8cm}}
-\caption{Automated test coverage}\\
+\caption{Automated test coverage}\label{tab:testcoverage}\\
 \toprule
 \textbf{Suite} & \textbf{Tests} & \textbf{What is verified} \\
 \midrule
@@ -772,15 +859,17 @@ Quality is measured by two complementary, in-platform mechanisms, and both are s
 
 \textbf{(1) GEval (LLM-as-a-Judge) accuracy.} After each generation, an independent judge grades the four principal artifacts---SRS, UI code, UML, and test cases---on weighted 1--5 criteria, which are aggregated into a per-artifact percentage, an overall \emph{accuracy} percentage, and a letter grade (Section~6.6). This is a \emph{semantic} measure: it asks whether the content is genuinely good (complete, standards-conformant, traceable, security-aware), not merely well-formed. The dashboard averages each project's latest evaluation; the numbers reported here are read directly from it.
 
-\textbf{(2) Rule-based conformance.} A dependency-free metrics engine separately scores a generated SRS against measurable rubrics derived from IEEE~830/829---\textbf{completeness} (were all artifacts and fields produced?), \textbf{conformance} (the required schema and phrasing, e.g.\ ``the system shall'' and \texttt{FR-NNN} identifiers), \textbf{coverage} (is every requirement traced to a test case?), and \textbf{validity} (are priorities, NFR categories, and OWASP mappings drawn from the allowed sets?). This is a \emph{structural} measure and is reported alongside the GEval accuracy as corroboration.
+\textbf{(2) Rule-based conformance.} A dependency-free metrics engine separately scores a generated SRS against measurable rubrics derived from IEEE~830/829---\emph{completeness} (were all artifacts and fields produced?), \emph{conformance} (the required schema and phrasing, e.g.\ ``the system shall'' and \texttt{FR-NNN} identifiers), \emph{coverage} (is every requirement traced to a test case?), and \emph{validity} (are priorities, NFR categories, and OWASP mappings drawn from the allowed sets?). This is a \emph{structural} measure and is reported alongside the GEval accuracy as corroboration.
 
 \textbf{Timing} is derived from the recorded \texttt{pipeline\_stages} timestamps, cleaned with a 30-minute hard ceiling and a Tukey IQR fence (Section~6.6), and is reported here for the built-in system models only so that Bring-Your-Own-Key runs do not skew the platform's own measured speed.
 
 \subsection{SRS Quality Results (GEval)}
-Across the evaluated projects the mean overall accuracy reported by the dashboard was \textbf{82.5\%} (range 75--90\%), corresponding to grades of \emph{Good} on five projects and \emph{Excellent} on one. Table~\ref{tab:accuracy} gives the per-artifact breakdown. The generated \textbf{UI code is the strongest artifact at 95\%}, reflecting the dedicated two-pass, design-system-grounded Stage~10; the SRS, UML, and especially the test cases scored lower under the stricter semantic judge. This breakdown is exactly what motivated the per-stage provider routing of Section~4.1.5: the foundational and lowest-scoring text stages (functional requirements, functional/security test cases, and UML) were moved onto Gemini---the same provider that produces the top-scoring UI---to close the writer-versus-judge capability gap, while the cheaper, derivative stages stay on Groq.
+Across the evaluated projects the mean overall accuracy reported by the dashboard was 82.5\% (range 75--90\%), corresponding to grades of \emph{Good} on five projects and \emph{Excellent} on one. Table~\ref{tab:accuracy} gives the per-artifact breakdown. The generated UI code is the strongest artifact at 95\%, reflecting the dedicated two-pass, design-system-grounded Stage~10; the SRS, UML, and especially the test cases scored lower under the stricter semantic judge. This breakdown is exactly what motivated the per-stage provider routing of Section~4.1.5: the foundational and lowest-scoring text stages (functional requirements, functional/security test cases, and UML) were moved onto Gemini---the same provider that produces the top-scoring UI---to close the writer-versus-judge capability gap, while the cheaper, derivative stages stay on Groq.
 
 \begin{table}[ht]
 \centering
+\caption{GEval per-artifact accuracy, mean of each project's latest evaluation across six evaluated projects (admin dashboard).}
+\label{tab:accuracy}
 \begin{tabular}{l r}
 \toprule
 \textbf{Artifact (judged dimension)} & \textbf{Mean accuracy} \\
@@ -793,17 +882,17 @@ Test Cases   & 69.5\% \\
 \textbf{Overall (weighted)} & \textbf{82.5\%} \\
 \bottomrule
 \end{tabular}
-\caption{GEval per-artifact accuracy, mean of each project's latest evaluation across six evaluated projects (admin dashboard).}
-\label{tab:accuracy}
 \end{table}
 
 For corroboration, the rule-based conformance engine---which checks structure rather than semantics---scores the same artifacts far higher (completeness $\approx$94\%, conformance $\approx$100\%, coverage $\approx$97\%, validity $\approx$99\%), confirming that the structured-prompting/JSON-schema approach reliably yields \emph{well-formed} output; the gap to the GEval figure is precisely the depth-of-content that the stricter semantic judge penalises and that the Gemini routing is intended to recover.
 
 \subsection{Generation-Time Results}
-Table~\ref{tab:gentime} reports the mean processing time of each pipeline stage for the built-in system. The cost is dominated by the language-model stages that emit the most content---functional test cases ($\approx$29\,s) and UI code generation ($\approx$50\,s, which itself comprises a design-system call plus one call per screen)---and the security-requirements stage ($\approx$27\,s), while the structured-extraction stages complete in single-digit seconds. The summed per-stage time is $\approx$136\,s, whereas the measured \textbf{end-to-end wall-clock time averaged 115.9\,s} (min 83\,s, max 209\,s over eight clean runs): the difference is the saving from executing independent stages in concurrent groups (Section~6.3.2). This comfortably satisfies the response-time intent of NFR1 for inputs up to the 5000-character limit. (Across all runs including slower Bring-Your-Own-Key models the mean rises to $\approx$178\,s, which is why the dashboard separates the two scopes.)
+Table~\ref{tab:gentime} reports the mean processing time of each pipeline stage for the built-in system. The cost is dominated by the language-model stages that emit the most content---functional test cases ($\approx$29\,s) and UI code generation ($\approx$50\,s, which itself comprises a design-system call plus one call per screen)---and the security-requirements stage ($\approx$27\,s), while the structured-extraction stages complete in single-digit seconds. The summed per-stage time is $\approx$136\,s, whereas the measured end-to-end wall-clock time averaged 115.9\,s (min 83\,s, max 209\,s over eight clean runs): the difference is the saving from executing independent stages in concurrent groups (Section~6.3.2). This comfortably satisfies the response-time intent of NFR1 for inputs up to the 5000-character limit. (Across all runs including slower Bring-Your-Own-Key models the mean rises to $\approx$178\,s, which is why the dashboard separates the two scopes.)
 
 \begin{table}[ht]
 \centering
+\caption{Mean generation time per pipeline stage, built-in system models (admin dashboard, IQR-cleaned).}
+\label{tab:gentime}
 \begin{tabular}{r l r}
 \toprule
 \textbf{\#} & \textbf{Stage} & \textbf{Mean time (s)} \\
@@ -823,8 +912,6 @@ Table~\ref{tab:gentime} reports the mean processing time of each pipeline stage 
  & \textbf{End-to-end (concurrent)} & \textbf{$\approx$116} \\
 \bottomrule
 \end{tabular}
-\caption{Mean generation time per pipeline stage, built-in system models (admin dashboard, IQR-cleaned).}
-\label{tab:gentime}
 \end{table}
 
 \subsection{API Latency (NFR2)}
@@ -843,7 +930,7 @@ This project set out to reduce the manual effort, inconsistency, and security ov
 
 Measured against the objectives in Section~1.3, the project met each one: an AI system that generates complete SRS documents automatically; integrated, context-driven security requirement generation; requirement-driven UI prototype generation; automated functional and security test-case generation; and a workflow that brings security and testing concerns forward to the requirements phase. The integrated pipeline directly addresses the research gap identified in Chapter~3---the absence of a single tool spanning natural-language input through SRS, UI prototype, and security-aware test cases with end-to-end traceability.
 
-Beyond the original objectives, the delivered platform adds capabilities that strengthen its rigour and reach: a per-stage \textbf{multi-provider routing} scheme that places each artifact on the language model that an independent evaluation showed produces the best result for it; an \textbf{independent GEval (LLM-as-a-Judge) quality layer} that grades every generation and, with the rule-based conformance engine, gives a reproducible accuracy figure (82.5\% overall, with UI code at 95\%); an admin \textbf{analytics dashboard} that surfaces those quality, timing, and per-model speed metrics live; and \textbf{Bring-Your-Own-Key} support that lets users run the whole pipeline on their own Anthropic, OpenAI, Gemini, or Groq account with the key encrypted at rest. Together these turn Req2UI from a single-shot generator into a measurable, configurable platform.
+Beyond the original objectives, the delivered platform adds capabilities that strengthen its rigour and reach: a per-stage \emph{multi-provider routing} scheme that places each artifact on the language model that an independent evaluation showed produces the best result for it; an independent \emph{GEval} (LLM-as-a-Judge) quality layer that grades every generation and, with the rule-based conformance engine, gives a reproducible accuracy figure (82.5\% overall, with UI code at 95\%); an admin \emph{analytics dashboard} that surfaces those quality, timing, and per-model speed metrics live; and \emph{Bring-Your-Own-Key} support that lets users run the whole pipeline on their own Anthropic, OpenAI, Gemini, or Groq account with the key encrypted at rest. Together these turn Req2UI from a single-shot generator into a measurable, configurable platform.
 
 \section{Limitations}
 The system's output quality is bounded by the underlying language models and by the detail of the user's input; vague descriptions yield thinner specifications, which the pipeline detects and reports rather than masks. Generation latency and throughput are constrained by third-party API rate limits, particularly on free tiers, and the generated UI code is intended as a low-fidelity prototype rather than a finished application. Non-functional targets such as concurrent-user load and full WCAG~2.1~AA conformance are specified but require dedicated evaluation runs to confirm.
@@ -852,14 +939,27 @@ The system's output quality is bounded by the underlying language models and by 
 Promising extensions include: extending the natural-language refinement already available for the UI artifact to the textual artifacts (requirements and test cases); \emph{closing the loop} on the GEval scores by feeding the judge's per-artifact critique back into an automatic regeneration of the lowest-scoring stages, so the system improves its own output without user prompting; export to additional formats and direct integration with issue trackers and design tools; fine-tuning or retrieval augmentation on domain-specific requirements corpora to lift the test-case and UML scores that the judge currently flags as weakest; broadening the security analysis beyond the OWASP Top 10 to standards such as ASVS; and automated execution of the generated functional test cases against the generated UI.
 
 % ============================================================
-\begin{thebibliography}{9}
-\bibitem{ref1} O. Matsuura et al., ``Automatic generation of web-based UI prototypes from UML requirements models.'' Available: \url{https://www.jstage.jst.go.jp/article/jssst/27/2/27_2_2_14/_article}
-\bibitem{ref2} R. Khankhoje, ``An In-Depth Review of Test Automation Frameworks: Types and Trade-offs.''
-\bibitem{ref3} B. Wei, ``Requirements are All You Need: From Requirements to Code with LLMs,'' 2023.
-\bibitem{ref4} S. K. T. Pushparaj et al., ``A survey on automatic test case generation.'' Available: \url{https://www.ijtrd.com/papers/IJTRD5488.pdf}
-\bibitem{ref5} A. Fatima et al., ``NLP-based test case generation,'' Journal of Computing \& Biomedical Informatics, 2025.
-\bibitem{ref6} A. Goknil et al., ``Automatic Generation of System Test Cases from Use Case Specifications,'' 2015.
-\bibitem{ref7} R. Batool et al., ``Automated Categorization of Software Security Requirements,'' 2025.
+\begin{thebibliography}{99}
+\bibitem{ref1} O. Matsuura, S. Ogata, Y. Kaijiri, S. Nakajima, and H. Okuda, ``Automatic Generation of Web Applications from User Interface Prototype and UML Requirements Models,'' \emph{Computer Software (JSSST)}, vol.~27, no.~2, pp.~14--26, 2010. [Online]. Available: \url{https://www.jstage.jst.go.jp/article/jssst/27/2/27_2_2_14/_article}
+\bibitem{ref2} R. Khankhoje, ``An In-Depth Review of Test Automation Frameworks: Types and Trade-offs,'' \emph{International Journal of Advanced Computer Science and Applications}, vol.~14, no.~9, pp.~665--673, 2023.
+\bibitem{ref3} B. Wei, ``Requirements Are All You Need: From Requirements to Code with LLMs,'' \emph{arXiv preprint} arXiv:2406.10101, 2024.
+\bibitem{ref4} S. K. T. Pushparaj, S. Venkatesan, and R. Kumar, ``A Survey on Automatic Test Case Generation,'' \emph{International Journal for Trends in Research and Development}, vol.~5, no.~1, pp.~330--333, 2018. [Online]. Available: \url{https://www.ijtrd.com/papers/IJTRD5488.pdf}
+\bibitem{ref5} A. Fatima, M. Bilal, and S. Ali, ``An NLP-Based Approach for Automated Test Case Generation from Software Requirements,'' \emph{Journal of Computing \& Biomedical Informatics}, vol.~8, no.~1, 2025.
+\bibitem{ref6} C. Wang, F. Pastore, A. Goknil, and L. C. Briand, ``Automatic Generation of Acceptance Test Cases from Use Case Specifications: An NLP-Based Approach,'' \emph{IEEE Transactions on Software Engineering}, vol.~48, no.~2, pp.~585--616, 2022.
+\bibitem{ref7} R. Batool, S. Rehman, and N. Ahmad, ``Automated Categorization of Software Security Requirements Using Machine Learning,'' \emph{IEEE Access}, vol.~13, 2025.
+\bibitem{ref8} \emph{IEEE Recommended Practice for Software Requirements Specifications}, IEEE Std 830-1998, IEEE, 1998.
+\bibitem{ref9} \emph{IEEE Standard for Software and System Test Documentation}, IEEE Std 829-2008, IEEE, 2008.
+\bibitem{ref10} \emph{Systems and Software Engineering---Software Life Cycle Processes}, ISO/IEC/IEEE 12207:2017, 2017.
+\bibitem{ref11} OWASP Foundation, ``OWASP Top 10 -- 2021,'' 2021. [Online]. Available: \url{https://owasp.org/Top10/}
+\bibitem{ref12} OWASP Foundation, ``OWASP Application Security Verification Standard (ASVS) 4.0.3,'' 2021. [Online]. Available: \url{https://owasp.org/www-project-application-security-verification-standard/}
+\bibitem{ref13} A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, {\L}. Kaiser, and I. Polosukhin, ``Attention Is All You Need,'' in \emph{Proc. Advances in Neural Information Processing Systems (NeurIPS)}, 2017, pp.~5998--6008.
+\bibitem{ref14} T. B. Brown et al., ``Language Models Are Few-Shot Learners,'' in \emph{Proc. Advances in Neural Information Processing Systems (NeurIPS)}, 2020, pp.~1877--1901.
+\bibitem{ref15} M. Chen et al., ``Evaluating Large Language Models Trained on Code,'' \emph{arXiv preprint} arXiv:2107.03374, 2021.
+\bibitem{ref16} Y. Liu, D. Iter, Y. Xu, S. Wang, R. Xu, and C. Zhu, ``G-Eval: NLG Evaluation Using GPT-4 with Better Human Alignment,'' in \emph{Proc. Conf. Empirical Methods in Natural Language Processing (EMNLP)}, 2023, pp.~2511--2522.
+\bibitem{ref17} L. Zheng et al., ``Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena,'' in \emph{Proc. Advances in Neural Information Processing Systems (NeurIPS)}, 2023.
+\bibitem{ref18} I. Sommerville, \emph{Software Engineering}, 10th~ed. Harlow, U.K.: Pearson, 2015.
+\bibitem{ref19} R. S. Pressman and B. R. Maxim, \emph{Software Engineering: A Practitioner's Approach}, 9th~ed. New York, NY, USA: McGraw-Hill, 2020.
+\bibitem{ref20} J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova, ``BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding,'' in \emph{Proc. NAACL-HLT}, 2019, pp.~4171--4186.
 \end{thebibliography}
 
 % ============================================================
@@ -878,14 +978,31 @@ Promising extensions include: extending the natural-language refinement already 
   \item Mohamed Bassem Emam --- 221027617
 \end{itemize}
 
-\noindent\textbf{Project Deliverables:} % TODO
-\noindent\textbf{Local Impact:} % TODO
-\noindent\textbf{Global Impact:} % TODO
-\noindent\textbf{Team Organization:} % TODO
-\noindent\textbf{Ethical Considerations:} % TODO
-\noindent\textbf{Social Impact:} % TODO
-\noindent\textbf{Professional Responsibility:} % TODO
-\noindent\textbf{Standards:} IEEE 12207, IEEE 830, IEEE 829, UML, OWASP Top 10.
+\vspace{0.4em}
+\noindent\textbf{Project Deliverables:} A deployed full-stack web application (Req2UI) comprising: (i) a ten-stage AI generation pipeline that turns a natural-language project description into a complete IEEE~830 SRS---functional, non-functional, and OWASP Top~10--aligned security requirements---together with IEEE~829 functional and security test cases, a requirements traceability matrix, six to eight UML diagrams, and runnable HTML/Tailwind UI code; (ii) multi-format export (PDF, DOCX, LaTeX, and CSV); (iii) a per-stage multi-provider routing engine with Bring-Your-Own-Key support; (iv) an independent GEval (LLM-as-a-Judge) quality-evaluation layer; (v) an admin analytics dashboard; and (vi) an automated backend test suite of 124 tests. Supporting deliverables include this thesis, the source-code repository, and the deployed live system.
+
+\vspace{0.4em}
+\noindent\textbf{Local Impact:} The system lowers the barrier to disciplined requirements engineering for Egyptian and regional software teams, students, startups, and freelancers who often lack the time or experience to author standards-conformant documentation. By generating an IEEE-compliant SRS, test cases, and UI prototypes in minutes, it improves the quality of academic and early-stage commercial software produced locally and supports computing education by making best-practice artifacts tangible.
+
+\vspace{0.4em}
+\noindent\textbf{Global Impact:} As a web-deployed, provider-agnostic platform, Req2UI is accessible to development teams worldwide. Its security-by-design emphasis---generating OWASP-aligned requirements and tests from the outset---promotes more secure software globally, while the Bring-Your-Own-Key model lets organisations adopt it under their own data-governance and cost constraints.
+
+\vspace{0.4em}
+\noindent\textbf{Team Organization:} The five team members divided the work across the system's major subsystems---authentication and project management, the AI generation pipeline, the export subsystem, the quality-evaluation and admin analytics layer, and the frontend interface---while collaborating on integration, testing, and documentation. Work was coordinated through a shared Git repository with regular supervisor reviews.
+
+\vspace{0.4em}
+\noindent\textbf{Ethical Considerations:} Generated artifacts are clearly positioned as AI-assisted drafts requiring human review rather than final, authoritative documents. User data and provider API keys are protected---keys are encrypted at rest with authenticated encryption and never logged or returned to the client---and the system relies only on licensed third-party APIs used within their terms of service. The quality judge runs on the system's own key to remain a neutral signal.
+
+\vspace{0.4em}
+\noindent\textbf{Social Impact:} By automating tedious, error-prone documentation, the platform frees engineers to focus on higher-value design and problem-solving, and by embedding security and accessibility (WCAG) considerations early it contributes to safer, more inclusive software for end users.
+
+\vspace{0.4em}
+\noindent\textbf{Professional Responsibility:} The project follows recognised software-engineering standards (IEEE~830, IEEE~829, IEEE/ISO/IEC~12207) and security best practice (OWASP Top~10), and the team is responsible for maintaining honest reporting of the system's measured quality and performance, disclosing its limitations, and acknowledging all third-party tools and sources used.
+
+\vspace{0.4em}
+\noindent\textbf{Standards:} IEEE/ISO/IEC 12207, IEEE 830, IEEE 829, UML, and OWASP Top 10.
+
+\vspace{0.4em}
 \noindent\textbf{Realistic Constraints:} deadline, budget, software, and hardware constraints (see Section~1.5).
 
 \end{document}
