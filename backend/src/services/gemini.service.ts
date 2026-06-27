@@ -1,6 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { env } from "../config/env";
 import { timeLLMCall } from "./llm-metrics";
+import { getLlmOverride } from "./llm/context";
+import { byokJSON, byokText } from "./llm/byok";
 
 const gemini = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
@@ -10,6 +12,11 @@ const gemini = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 // legacy (deprecation window mid-2026) — keep 2.5 only as a trailing fallback.
 // Override the primary with GEMINI_MODEL (e.g. a more capable model on a paid tier).
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.1-flash-lite";
+
+// The lead generation model (for analytics/telemetry). The runtime may fall back
+// across the model chain on outages, but this is the model a built-in
+// Gemini-routed stage normally runs on — recorded per stage for speed analytics.
+export const GEMINI_GEN_MODEL = MODEL;
 
 // Model fallback chain. Two failure modes drive this:
 //   1. 503 ("model overloaded" / "high demand") during traffic spikes — per-model,
@@ -158,6 +165,10 @@ export async function callGeminiJSON(
   maxTokens = 8000,
   retries = 5
 ): Promise<any> {
+  // BYOK: a user-configured provider serves every generation call.
+  const override = getLlmOverride();
+  if (override) return byokJSON(override, systemPrompt, userPrompt, maxTokens);
+
   const raw = await generate(systemPrompt, userPrompt, maxTokens, 0.3, true, retries);
   return JSON.parse(raw);
 }
@@ -211,6 +222,9 @@ export async function callGeminiText(
   maxTokens = 8000,
   retries = 5
 ): Promise<string> {
+  const override = getLlmOverride();
+  if (override) return byokText(override, systemPrompt, userPrompt, maxTokens);
+
   const raw = await generate(systemPrompt, userPrompt, maxTokens, 0.4, false, retries);
   // Strip markdown code fences if present
   return raw.replace(/^```(?:html)?\n?/i, "").replace(/\n?```\s*$/i, "").trim();

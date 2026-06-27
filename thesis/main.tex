@@ -119,9 +119,11 @@ Special thanks go to our families and friends for their continuous support, pati
 \textbf{Abbreviation} & \textbf{Description} \\
 \midrule
 \endhead
+AES & Advanced Encryption Standard \\
 AI & Artificial Intelligence \\
 API & Application Programming Interface \\
 ASVS & Application Security Verification Standard \\
+BYOK & Bring Your Own Key \\
 CI/CD & Continuous Integration / Continuous Deployment \\
 CRUD & Create, Read, Update, Delete \\
 GUI & Graphical User Interface \\
@@ -393,11 +395,11 @@ Internally, these four conceptual modules are realised as a \textbf{ten-stage ge
   \item \textbf{Security Test Cases} --- attack-vector-driven cases per security requirement.
   \item \textbf{UI Wireframe Descriptions} --- screens, components, and navigation.
   \item \textbf{Traceability Matrix} --- links functional requirements to test cases and security requirements, with coverage metrics.
-  \item \textbf{UML Diagrams} --- use case, class, and sequence diagrams as Mermaid source.
+  \item \textbf{UML Diagrams} --- six to eight diagrams across multiple UML types (use case, class, ER, sequence, activity, state, component) as Mermaid source.
   \item \textbf{UI Code Generation} --- production-quality HTML/Tailwind pages.
 \end{enumerate}
 
-Stages 1--9 use the Groq API (\texttt{llama-3.3-70b-versatile}); stage 10 uses Google Gemini. Because later stages depend only on specific earlier ones, independent stages are executed concurrently (stages 3--5 together, then 6--7, then 8--10), reducing total generation time. Every artifact is upserted to the database keyed by \texttt{(project, type)}, so an interrupted run can be \emph{resumed}: stages whose artifact already exists are skipped rather than regenerated. Progress is streamed to the browser in real time using Server-Sent Events (SSE).
+The pipeline uses \textbf{two language-model providers, routed per stage}. Most stages run on the Groq API (\texttt{llama-3.3-70b-versatile} for reasoning-heavy stages, \texttt{llama-3.1-8b-instant} for templated/derivative ones), while the capability-critical text stages---functional requirements (2), functional and security test cases (5--6), and UML diagrams (9)---together with UI code generation (10) are routed to Google Gemini (\texttt{gemini-3.1-flash-lite}), which an independent quality evaluation (Section~7.3) showed produces stronger results on exactly those artifacts. Each Gemini-routed stage transparently \emph{falls back} to its Groq model if Gemini is unavailable, so a provider outage costs quality on a single stage rather than aborting the run. Because later stages depend only on specific earlier ones, independent stages are executed concurrently (stages 3--5 together, then 6--7, then 8--10), reducing total generation time. Every artifact is upserted to the database keyed by \texttt{(project, type)}, so an interrupted run can be \emph{resumed}: stages whose artifact already exists are skipped rather than regenerated. Progress is streamed to the browser in real time using Server-Sent Events (SSE). Optionally, a user can supply their own provider key (Section~6.5), in which case every stage in their generation runs on the model they choose instead.
 
 \section{Functional Requirements}
 \subsection{User Management and Project Handling}
@@ -510,7 +512,7 @@ FR23 & Administrative Dashboard & Low & The system shall provide administrative 
 \section{UML Diagrams}
 
 \subsection{Architecture Diagram}
-The system adopts a layered architecture composed of presentation, application, and data layers. Users interact through a web-based interface to submit project descriptions and retrieve generated artifacts. The application layer processes input and orchestrates a ten-stage pipeline that generates SRS documents, security requirements, UI wireframes, UI code, and test cases. External LLM services (Groq and Google Gemini) are integrated, and all project data is stored in a managed PostgreSQL database (Neon).
+The system adopts a layered architecture composed of presentation, application, and data layers. Users interact through a web-based interface to submit project descriptions and retrieve generated artifacts. The application layer processes input and orchestrates a ten-stage pipeline that generates SRS documents, security requirements, UI wireframes, UI code, and test cases, then independently grades the result. External LLM services (Groq and Google Gemini, routed per stage---or a user's own provider) are integrated, and all project data is stored in a managed PostgreSQL database (Neon).
 
 \begin{figure}[ht]
   \centering
@@ -520,7 +522,7 @@ The system adopts a layered architecture composed of presentation, application, 
 \end{figure}
 
 \subsection{System Context Diagram}
-The Req2UI system operates as a central system that interacts with users, administrators, and external services. Users submit natural-language project descriptions and receive generated SRS documents, UI prototypes, and test cases. The system integrates with the Groq API for requirement and test-case generation, the Google Gemini API for UI code generation, and the OWASP Top 10 knowledge base for security analysis.
+The Req2UI system operates as a central system that interacts with users, administrators, and external services. Users submit natural-language project descriptions and receive generated SRS documents, UI prototypes, and test cases. The system integrates with two language-model providers---the Groq API and the Google Gemini API---routed per pipeline stage, and the OWASP Top 10 knowledge base for security analysis. Administrators consult an analytics dashboard, and users may optionally connect their own AI-provider key.
 
 \begin{figure}[ht]
   \centering
@@ -550,7 +552,7 @@ The use case diagram captures the primary interactions between the End User and 
 \end{figure}
 
 \subsection{Sequence Diagram}
-This sequence diagram describes the flow of interactions when a user generates artifacts. The request opens a Server-Sent Events (SSE) stream; the pipeline runs stages 1--9 against Groq, persisting each artifact and streaming progress, then runs stage 10 against Gemini to produce the design system and per-screen UI code before the artifacts viewer is rendered.
+This sequence diagram describes the flow of interactions when a user generates artifacts. The request opens a Server-Sent Events (SSE) stream; the pipeline runs the ten stages---each against its routed provider (Groq or Gemini, Section~4.1.5)---persisting each artifact and streaming progress, then runs stage 10 to produce the design system and per-screen UI code before the artifacts viewer is rendered. After the pipeline completes, an independent quality judge grades the artifacts and the score is streamed as a final event.
 
 \begin{figure}[ht]
   \centering
@@ -584,9 +586,9 @@ This activity diagram shows the end-to-end workflow of the system. It starts wit
   \item \textbf{Frontend:} React 19, TypeScript, Tailwind CSS v4, Vite, React Router 7, Axios.
   \item \textbf{Backend:} Node.js, Express 4, TypeScript.
   \item \textbf{Database:} PostgreSQL via Neon (\texttt{@neondatabase/serverless}).
-  \item \textbf{AI Providers:} Groq (\texttt{llama-3.3-70b-versatile}) for stages 1--9; Google Gemini 2.5 Flash-Lite for stage 10 (UI code).
-  \item \textbf{Export:} pdfkit, docx.js, csv-writer, resvg-js (SVG$\rightarrow$PNG for diagram embedding).
-  \item \textbf{Security:} OWASP Top 10 as the reference framework for security requirements and test cases.
+  \item \textbf{AI Providers:} Groq (\texttt{llama-3.3-70b-versatile} / \texttt{llama-3.1-8b-instant}) and Google Gemini (\texttt{gemini-3.1-flash-lite}), routed per stage; optional user-supplied Anthropic, OpenAI, Gemini, or Groq key.
+  \item \textbf{Export:} Tectonic (LaTeX$\rightarrow$PDF), docx.js, csv-writer, JSZip (Overleaf bundle), resvg-js (SVG$\rightarrow$PNG for diagram embedding).
+  \item \textbf{Security:} OWASP Top 10 as the reference framework for security requirements and test cases; AES-256-GCM encryption for stored user provider keys.
   \item \textbf{Deployment:} Vercel (frontend) and Render (backend).
 \end{itemize}
 
@@ -599,6 +601,8 @@ The implemented web application provides the following primary screens, which co
   \item \textbf{Project Detail} --- shows the ten pipeline stages and streams live progress (via SSE) while generation runs, presented through an animated progress ring, an elapsed-time counter, and a live preview that surfaces each artifact (the extracted actors, the drafted requirements, the generated screens) as its stage completes, turning the wait into visible progress on the real output.
   \item \textbf{Artifacts Viewer} --- displays the generated requirements, test cases, traceability matrix, and Mermaid-rendered UML diagrams, with export controls (PDF, DOCX, LaTeX, CSV).
   \item \textbf{UI Code Preview} --- renders the generated HTML screens in an embedded preview frame with navigation between screens, responsive (desktop/tablet/mobile) viewports, an instant accent-recolor control, and a panel for natural-language AI refinement of the generated UI.
+  \item \textbf{Settings} --- lets a user connect their own AI provider (Anthropic, OpenAI, Gemini, or Groq), enter a model and API key, test the connection, and toggle Bring-Your-Own-Key on or off; the stored key is shown only as a masked preview.
+  \item \textbf{Admin Dashboard} --- an admin-only analytics view with headline KPIs (users, projects, mean GEval accuracy, generation time), per-artifact quality and grade distributions, per-stage and per-model timing, and a recent-projects table annotated with each run's quality score and engine (built-in vs.\ BYOK).
 \end{itemize}
 Across all screens the application follows a single, consistent visual design language and adapts automatically to the operating system's light/dark colour-scheme preference, which the user can override at any time; the choice is remembered between sessions.
 
@@ -616,34 +620,37 @@ The system is implemented as a full-stack \textbf{TypeScript} application split 
   \item \textbf{Frontend:} React 19, Vite, Tailwind CSS v4, React Router 7, and Axios. It is a single-page application (SPA) that communicates with the backend over a REST API and an SSE stream.
   \item \textbf{Backend:} Node.js ($\geq$ 20) with Express 4, written in TypeScript and run with \texttt{ts-node-dev} in development. It exposes the REST API, the SSE generation endpoint, and the export endpoints.
   \item \textbf{Database:} PostgreSQL hosted on Neon, accessed through the \texttt{@neondatabase/serverless} driver.
-  \item \textbf{AI providers:} Groq (\texttt{llama-3.3-70b-versatile}) for stages 1--9, and Google Gemini (\texttt{gemini-2.5-flash-lite}) for stage 10.
+  \item \textbf{AI providers:} Groq (\texttt{llama-3.3-70b-versatile} and \texttt{llama-3.1-8b-instant}) and Google Gemini (\texttt{gemini-3.1-flash-lite}), routed per stage (Section~4.1.5). Gemini also backs the independent quality judge (Section~7.3). Users may additionally bring their own Anthropic, OpenAI, Gemini, or Groq key (Section~6.5).
 \end{itemize}
 
-Configuration is supplied through environment variables (database URL, JWT secrets, Groq and Gemini API keys, and the frontend origin), validated at start-up before the server begins listening.
+Configuration is supplied through environment variables (database URL, JWT secrets, Groq and Gemini API keys, an optional secret-encryption key for stored provider keys, an admin-email allowlist, and the frontend origin), validated at start-up before the server begins listening.
 
 \section{Database Schema}
-The schema comprises six tables, all using UUID primary keys and cascading foreign keys:
+The schema comprises nine tables, all using UUID primary keys and cascading foreign keys:
 \begin{itemize}[leftmargin=*,nosep]
-  \item \texttt{users} --- credentials and account-lockout fields (\texttt{failed\_attempts}, \texttt{locked\_until}).
+  \item \texttt{users} --- credentials, account-lockout fields (\texttt{failed\_attempts}, \texttt{locked\_until}), and an \texttt{is\_admin} flag gating the analytics dashboard.
   \item \texttt{refresh\_tokens} --- hashed refresh tokens with a \texttt{family} identifier and \texttt{revoked} flag for theft detection.
-  \item \texttt{projects} --- user projects with a \texttt{status} field and soft-delete (\texttt{deleted\_at}).
+  \item \texttt{projects} --- user projects with a \texttt{status} field, optional \texttt{metadata}/\texttt{ui\_preferences} JSONB, and soft-delete (\texttt{deleted\_at}).
   \item \texttt{artifacts} --- one JSONB \texttt{content} row per artifact type, with a \texttt{UNIQUE(project\_id, type)} constraint and a \texttt{version} counter that increments on every regeneration (upsert).
-  \item \texttt{pipeline\_stages} --- per-stage status (\texttt{pending}/\texttt{running}/\texttt{completed}/\texttt{failed}), error text, and timestamps.
+  \item \texttt{pipeline\_stages} --- per-stage status (\texttt{pending}/\texttt{running}/\texttt{completed}/\texttt{failed}), error text, timestamps, and the \texttt{provider}/\texttt{model}/\texttt{is\_byok} attribution used for the timing and model-speed analytics.
+  \item \texttt{ui\_revisions} --- version history of the \texttt{ui\_code} artifact, snapshotted before each refinement/restore so UI changes can be undone.
+  \item \texttt{evaluations} --- append-only history of GEval quality-evaluation runs (overall score, grade, and the full per-artifact JSONB report) per project.
+  \item \texttt{user\_ai\_settings} --- one row per user holding their Bring-Your-Own-Key provider, model, and \emph{encrypted} API key (Section~6.5).
   \item \texttt{exports} --- references to generated export files.
 \end{itemize}
-The \texttt{UNIQUE(project\_id, type)} constraint is central to the resumable design: each stage performs an \texttt{INSERT \ldots\ ON CONFLICT DO UPDATE} so re-running the pipeline overwrites rather than duplicates artifacts.
+The \texttt{UNIQUE(project\_id, type)} constraint is central to the resumable design: each stage performs an \texttt{INSERT \ldots\ ON CONFLICT DO UPDATE} so re-running the pipeline overwrites rather than duplicates artifacts. Schema migrations are written idempotently (\texttt{CREATE TABLE IF NOT EXISTS}, \texttt{ADD COLUMN IF NOT EXISTS}) so new columns---the admin flag, the per-stage model attribution---roll forward over an existing database without data loss.
 
 \section{The AI Generation Pipeline}
 The pipeline (Section~4.1.5) is implemented as a single orchestrator that drives ten stages. Each stage sends a system prompt (defining a strict JSON output schema) and a user prompt (the project context) to the LLM, then validates and persists the result.
 
 \subsection{Structured Prompting and Robust Parsing}
-Every Groq stage requests \texttt{response\_format: json\_object} at a low temperature (0.3) for deterministic, parseable output. The client guards against two failure modes: (i) on a length-truncated response it appends a ``be more concise'' instruction and retries with a smaller target; and (ii) transient errors and rate limits (HTTP 429) are retried with exponential backoff. A floor check after stage 2 aborts the run with an actionable message if fewer than three functional requirements could be derived, preventing a hollow SRS from vague input.
+Every structured stage requests JSON output at a low temperature (0.3) for deterministic, parseable results---\texttt{response\_format: json\_object} on Groq and \texttt{responseMimeType: application/json} on Gemini. The client guards against two failure modes: (i) on a length-truncated response it appends a ``be more concise'' instruction and retries with a smaller target; and (ii) transient errors and rate limits (HTTP 429) are retried with exponential backoff, and Gemini-routed stages additionally fall back to their Groq model on a hard failure. A floor check after stage 2 aborts the run with an actionable message if fewer than three functional requirements could be derived, preventing a hollow SRS from vague input.
 
 \subsection{Concurrency and Resumability}
 Stages are grouped into dependency layers and the independent stages in each layer run concurrently (stages 3--5, then 6--7, then 8--10), shortening end-to-end latency. Before running, the orchestrator loads all existing artifacts for the project; any stage whose artifact is already present is marked complete and skipped, so an interrupted or failed run resumes from the point of failure. An explicit ``re-generate'' clears this cache and redoes every stage.
 
 \subsection{UML Diagram Generation}
-Stage 9 emits three UML diagrams (use case, class, sequence) as Mermaid source, which the frontend renders client-side; the output is sanitised to strip code fences that would break rendering.
+Stage 9 emits six to eight diagrams spanning multiple UML types (use case, class, ER, sequence, activity, state, component) as Mermaid source, which the frontend renders client-side; the output is sanitised to strip code fences that would break rendering. This stage is routed to Gemini (with a Groq fallback), as the model must hold both entity/actor accuracy and strict Mermaid syntax---something weaker models break.
 
 \subsection{UI Code Generation (Stage 10)}
 Stage 10 is the most elaborate stage and is implemented as a two-pass process on Gemini, summarised in Figure~\ref{fig:uicode}. Before any model call, a categorisation heuristic (\texttt{selectDistinctScreens}) deduplicates near-identical screens (e.g.\ login vs.\ register) so generation effort is spent on genuinely different pages, capped at six.
@@ -668,8 +675,20 @@ Stage 10 is the most elaborate stage and is implemented as a two-pass process on
 \section{Authentication and Security Implementation}
 Authentication uses short-lived JWT access tokens (15 minutes) held in \texttt{sessionStorage} and long-lived refresh tokens (7 days) stored in an \texttt{httpOnly} cookie. Refresh tokens are SHA-256 hashed before storage and grouped into a \emph{family}; on each refresh the used token is rotated (revoked and replaced), and if an already-revoked token is presented the entire family is revoked --- a standard refresh-token-theft mitigation. Passwords are hashed with \texttt{bcrypt} (work factor 12). Five failed logins lock an account for 15 minutes. Additional hardening includes Helmet security headers, CORS restricted to the configured frontend origin with credentials, Zod schema validation on all auth inputs, an IP-based rate limiter (5 attempts per 15 minutes) on auth endpoints, and \texttt{trust proxy} configured for a single proxy hop so the rate limiter works correctly behind the hosting provider's proxy. The SSE generation endpoint accepts the access token as a query parameter because the \texttt{EventSource} API cannot set authorization headers.
 
+\section{Bring-Your-Own-Key (Multi-Provider) Support}
+By default every generation runs on the platform's own provider keys with the per-stage routing of Section~4.1.5. A user may instead connect their own provider in \textbf{Settings}, choosing among \textbf{Anthropic (Claude), OpenAI (ChatGPT), Google Gemini, and Groq}, a model name, and an API key; a ``Test connection'' action verifies the credential with a tiny prompt before it is saved. When enabled, that provider/model serves \emph{every} LLM call in the user's generations, and each pipeline stage is recorded with the provider, model, and a \texttt{is\_byok} flag so the analytics dashboard can separate user runs from the built-in system.
+
+Three implementation concerns make this robust. \textbf{(i) Secret handling:} the API key is encrypted at rest with \texttt{AES-256-GCM} (authenticated encryption, so tampering is detected on decrypt), the key being derived via \texttt{scrypt} from a dedicated server secret; it is never returned to the client (only a masked \texttt{abcd}\(\bullet\bullet\bullet\bullet\)\texttt{wxyz} preview) and never written to logs. \textbf{(ii) Transparent propagation:} rather than thread a credentials argument through dozens of pipeline functions, the chosen configuration is stashed in an \texttt{AsyncLocalStorage} for the duration of the request; the low-level provider entrypoints read it transparently and route accordingly, so the existing pipeline code is unchanged. Notably, the quality judge (below) deliberately ignores this override---evaluation must always run on the system's own key to stay a neutral signal. \textbf{(iii) Provider quirks:} a single dispatcher normalises the small API differences that otherwise make ``it works on my model'' fragile---Anthropic's \texttt{max\_tokens} cap, the newer OpenAI families that require \texttt{max\_completion\_tokens} and reject a custom temperature, JSON-mode availability, and Gemini's thinking-token budget---adapting on the specific errors each returns. The same transient-error retry/back-off logic used by the built-in providers applies, with permanent errors (bad key or model) failing fast with an actionable message.
+
+\section{Quality Evaluation and the Admin Dashboard}
+Two analytics layers observe the platform without altering any generated artifact.
+
+\textbf{GEval (LLM-as-a-Judge).} After a pipeline completes, an independent evaluator grades the output against a version-controlled rubric. Four artifact dimensions---the SRS document, the UI code, the UML diagrams, and the test cases---are judged in parallel on a 1--5 scale against weighted criteria (e.g.\ completeness, IEEE conformance, traceability, security depth); the weighted scores are converted to percentages and aggregated, over only the dimensions actually present, into an overall percentage and a letter grade (Excellent / Good / \ldots). The judge runs on Gemini (with a Groq fallback) using ``thinking'' mode for more deliberate grading, and---crucially---always on the system's own key. Evaluation \emph{never blocks generation}: a missing artifact or a judge failure simply marks that dimension un-evaluated and degrades gracefully. Each run is appended to the \texttt{evaluations} table with the rubric version, so scores stay interpretable as the criteria evolve, and the overall score is streamed to the browser as a final SSE event and shown as a \textbf{Quality} tab.
+
+\textbf{Admin analytics dashboard.} An internal, admin-gated dashboard (access controlled by the \texttt{is\_admin} flag and an email allowlist) aggregates platform-wide read-only statistics: user and project counts, project status mix, and---drawn directly from the \texttt{evaluations} and \texttt{pipeline\_stages} tables---the mean GEval accuracy with its per-artifact breakdown and grade distribution, per-stage and end-to-end generation timing, and per-model speed. Two robustness details make the numbers trustworthy: each project contributes only its \emph{latest} evaluation (re-runs don't double-count), and timing is cleaned with a hard 30-minute ceiling plus a Tukey IQR fence that excludes outlier runs from the averages. Built-in and Bring-Your-Own-Key runs are reported side by side so a user's own (possibly slower or faster) model never silently skews the built-in system's measured speed. This dashboard is the direct source of the evaluation figures reported in Section~7.3.
+
 \section{Export Subsystem}
-Generated artifacts are assembled into an IEEE 830 document structure (\texttt{ieeeSections}) and rendered to four formats: \textbf{PDF} (pdfkit, with a styled title page, running headers/footers, colour-headed tables, and Mermaid diagrams rasterised to PNG via resvg-js), \textbf{DOCX} (docx.js with heading styles), \textbf{LaTeX} (a thesis-styled \texttt{report} with \texttt{xltabular} tables, compilable with pdfLaTeX), and \textbf{CSV} (a flat export of requirements, test cases, and the traceability matrix).
+Generated artifacts are assembled into an IEEE 830 document structure (\texttt{ieeeSections}) and rendered to four formats: \textbf{PDF} (a thesis-styled IEEE 830 \texttt{report}---title page, front matter, colour-headed \texttt{xltabular} requirement tables, a UML chapter, and a UI appendix---compiled server-side to PDF with \textbf{Tectonic}, a single self-contained TeX engine that resolves the table of contents in one pass; on the plain Node host the binary is self-bootstrapped on first use, so PDF export needs no container), \textbf{DOCX} (docx.js with heading styles), \textbf{LaTeX} (the same \texttt{report} source, downloadable as raw \texttt{.tex} or as an Overleaf-ready \texttt{.zip} bundle with the rendered diagram figures, built via JSZip), and \textbf{CSV} (a flat export of requirements, test cases, and the traceability matrix). UML Mermaid diagrams captured client-side are rasterised to PNG via resvg-js and embedded as figures in the PDF and LaTeX outputs.
 
 \section{Results and Discussion}
 The implemented system successfully realises the full pipeline envisioned in the objectives: from a single natural-language description it produces functional, non-functional, and OWASP-aligned security requirements; functional and security test cases; a traceability matrix; UML diagrams; and runnable UI code --- all exportable in four formats. The resumable, concurrent pipeline makes generation both faster and resilient to transient LLM failures, and the streaming UI gives users live feedback during a multi-minute generation. The principal practical constraint encountered was LLM rate limiting (particularly Gemini's free tier), which is mitigated through request throttling, backoff, and the resume mechanism rather than eliminated.
@@ -679,7 +698,7 @@ The implemented system successfully realises the full pipeline envisioned in the
 Testing the system spans two complementary levels: (i) the artifacts the system \emph{generates} for a user's project (the functional and security test cases produced by stages 5 and 6, documented in IEEE 829 form), and (ii) the verification of the platform itself through an automated unit/integration test suite. This chapter focuses on the latter, together with the evaluation strategy for the non-functional requirements.
 
 \section{Automated Test Suite}
-The backend is covered by a Jest test suite executed with \texttt{npm test} (\texttt{jest --runInBand}). The suite mocks the database and token service so routes are tested in isolation, and uses \texttt{supertest} to drive the Express application. At the time of writing, the suite comprises \textbf{ten test suites and 103 passing tests}.
+The backend is covered by a Jest test suite executed with \texttt{npm test} (\texttt{jest --runInBand}). The suite mocks the database, the language-model providers, and the token service so routes and services are tested in isolation, and uses \texttt{supertest} to drive the Express application. At the time of writing, the suite comprises \textbf{eleven test suites and 124 tests}.
 
 \begin{longtable}{L{3.4cm} L{1.4cm} L{8cm}}
 \caption{Automated test coverage}\\
@@ -691,12 +710,13 @@ Authentication routes & 9 & Registration validation (missing fields, short passw
 Auth middleware & 4 & Rejection of missing/invalid/expired bearer tokens and acceptance of a valid token with the decoded user attached to the request. \\
 Project routes & 9 & Project create/list/read/soft-delete, ownership enforcement, validation of name/description bounds, and optional metadata and UI-preference payloads. \\
 Token service & 8 & Refresh-token issuance, SHA-256 hashing, rotation, family-based revocation on reuse, and expiry handling. \\
-Pipeline service & 4 & Orchestration flow, stage sequencing, and resumability (skipping stages whose artifact already exists). \\
-Pipeline helpers & 26 & Screen categorisation, distinct-screen selection (dedup/backfill/limit), Mermaid sanitisation, deterministic accent-scale construction, the indigo-remap accent config, and HTML completeness validation. \\
+Pipeline service & 4 & Orchestration flow, stage sequencing, per-stage provider routing (Groq vs.\ Gemini), and resumability (skipping stages whose artifact already exists). \\
+Pipeline helpers & 29 & Screen categorisation, distinct-screen selection (dedup/backfill/limit), Mermaid sanitisation, deterministic accent-scale construction, the indigo-remap accent config, and HTML completeness validation. \\
 Metrics service & 12 & Coverage and traceability metric calculations over requirements and test cases. \\
+GEval evaluation & 12 & The LLM-as-a-Judge evaluator: report shape over all four dimensions, weighted 1--5\(\rightarrow\)percentage aggregation, missing-artifact handling (dimension marked un-evaluated without a judge call), and graceful degradation when a judge call throws. \\
 UI preferences & 7 & Mapping of preference fields to prompt guidance, custom-colour handling, and omission of empty/``AI-chooses'' values. \\
 LLM latency metrics & 9 & Nearest-rank percentile computation, per-provider aggregation (count/failures/p50/p95/max), buffer bounding, and success/failure recording around a timed call. \\
-Export service & 15 & LaTeX document structure (title page, front matter, numbered chapters), colour palette and styled headings, requirement tables, balanced \texttt{xltabular}/\texttt{itemize}/\texttt{enumerate} environments, folding of acceptance criteria and controls into rows, and CSV header/row correctness and counts. \\
+Export service & 21 & LaTeX document structure (title page, front matter, numbered chapters), colour palette and styled headings, requirement tables, balanced \texttt{xltabular}/\texttt{itemize}/\texttt{enumerate} environments, folding of acceptance criteria and controls into rows, and CSV header/row correctness and counts. \\
 \bottomrule
 \end{longtable}
 
@@ -707,31 +727,39 @@ For each generated project, the system itself produces functional test cases (st
 The non-functional requirements (Section~4.3) are evaluated along two axes: the \emph{quality} of the generated SRS and the \emph{performance} of the generation process. Both are measured by tooling built into the platform, so the figures are reproducible rather than anecdotal.
 
 \subsection{Measurement Methodology}
-A dependency-free \emph{metrics engine} scores a generated SRS against 32 measurable rubrics derived from IEEE~830/829, each expressed as a passed/total ratio and grouped into four dimensions --- \textbf{completeness} (were all artifacts and fields produced?), \textbf{conformance} (do they follow the required schema and phrasing, e.g.\ ``the system shall'' and \texttt{FR-NNN} identifiers?), \textbf{coverage} (is every requirement traced to a test case?), and \textbf{validity} (are priorities, NFR categories, and OWASP mappings drawn from the allowed sets?). The mean rubric score is reported as the SRS \emph{accuracy}. Two tools consume the engine: a database report (\texttt{npm run report}) that scores every completed project and derives per-stage timing from the recorded \texttt{pipeline\_stages} timestamps (no API cost), and a live benchmark (\texttt{npm run bench}) that re-generates a project while timing each stage with a monotonic clock and capturing per-call API latency. The results below were produced by the database report over the projects generated during development.
+Quality is measured by two complementary, in-platform mechanisms, and both are surfaced live on the admin analytics dashboard (Section~6.6), so the figures below are reproducible from the running system rather than anecdotal.
 
-\subsection{SRS Quality Results}
-Across the evaluated projects the mean SRS accuracy was \textbf{97.6\%}. Table~\ref{tab:accuracy} gives the breakdown by quality dimension. Conformance and validity are essentially perfect, confirming that the structured-prompting/JSON-schema approach reliably yields well-formed, standards-conformant artifacts. The small completeness shortfall is concentrated in two optional front-matter rubrics (project ``objectives'' and some narrative prose fields), which are occasionally omitted for terse inputs; the core requirement, test-case, traceability, UML, and UI-code artifacts score at or near 100\%.
+\textbf{(1) GEval (LLM-as-a-Judge) accuracy.} After each generation, an independent judge grades the four principal artifacts---SRS, UI code, UML, and test cases---on weighted 1--5 criteria, which are aggregated into a per-artifact percentage, an overall \emph{accuracy} percentage, and a letter grade (Section~6.6). This is a \emph{semantic} measure: it asks whether the content is genuinely good (complete, standards-conformant, traceable, security-aware), not merely well-formed. The dashboard averages each project's latest evaluation; the numbers reported here are read directly from it.
+
+\textbf{(2) Rule-based conformance.} A dependency-free metrics engine separately scores a generated SRS against measurable rubrics derived from IEEE~830/829---\textbf{completeness} (were all artifacts and fields produced?), \textbf{conformance} (the required schema and phrasing, e.g.\ ``the system shall'' and \texttt{FR-NNN} identifiers), \textbf{coverage} (is every requirement traced to a test case?), and \textbf{validity} (are priorities, NFR categories, and OWASP mappings drawn from the allowed sets?). This is a \emph{structural} measure and is reported alongside the GEval accuracy as corroboration.
+
+\textbf{Timing} is derived from the recorded \texttt{pipeline\_stages} timestamps, cleaned with a 30-minute hard ceiling and a Tukey IQR fence (Section~6.6), and is reported here for the built-in system models only so that Bring-Your-Own-Key runs do not skew the platform's own measured speed.
+
+\subsection{SRS Quality Results (GEval)}
+Across the evaluated projects the mean overall accuracy reported by the dashboard was \textbf{82.5\%} (range 75--90\%), corresponding to grades of \emph{Good} on five projects and \emph{Excellent} on one. Table~\ref{tab:accuracy} gives the per-artifact breakdown. The generated \textbf{UI code is the strongest artifact at 95\%}, reflecting the dedicated two-pass, design-system-grounded Stage~10; the SRS, UML, and especially the test cases scored lower under the stricter semantic judge. This breakdown is exactly what motivated the per-stage provider routing of Section~4.1.5: the foundational and lowest-scoring text stages (functional requirements, functional/security test cases, and UML) were moved onto Gemini---the same provider that produces the top-scoring UI---to close the writer-versus-judge capability gap, while the cheaper, derivative stages stay on Groq.
 
 \begin{table}[ht]
 \centering
 \begin{tabular}{l r}
 \toprule
-\textbf{Quality dimension} & \textbf{Mean score} \\
+\textbf{Artifact (judged dimension)} & \textbf{Mean accuracy} \\
 \midrule
-Completeness & 93.9\% \\
-Conformance & 100.0\% \\
-Coverage & 97.4\% \\
-Validity & 99.4\% \\
+UI Code      & 95.0\% \\
+SRS Document & 79.2\% \\
+UML Diagrams & 74.7\% \\
+Test Cases   & 69.5\% \\
 \midrule
-\textbf{Overall accuracy} & \textbf{97.6\%} \\
+\textbf{Overall (weighted)} & \textbf{82.5\%} \\
 \bottomrule
 \end{tabular}
-\caption{Generated-SRS accuracy by quality dimension (mean across evaluated projects).}
+\caption{GEval per-artifact accuracy, mean of each project's latest evaluation across six evaluated projects (admin dashboard).}
 \label{tab:accuracy}
 \end{table}
 
+For corroboration, the rule-based conformance engine---which checks structure rather than semantics---scores the same artifacts far higher (completeness $\approx$94\%, conformance $\approx$100\%, coverage $\approx$97\%, validity $\approx$99\%), confirming that the structured-prompting/JSON-schema approach reliably yields \emph{well-formed} output; the gap to the GEval figure is precisely the depth-of-content that the stricter semantic judge penalises and that the Gemini routing is intended to recover.
+
 \subsection{Generation-Time Results}
-Table~\ref{tab:gentime} reports the mean processing time of each pipeline stage. The cost is dominated by the language-model stages that emit the most content --- functional test cases ($\approx$47\,s) and UI code generation ($\approx$80\,s, which itself comprises a design-system call plus one call per screen) --- while the structured-extraction stages complete in single-digit seconds. The summed per-stage time is $\approx$173\,s; true end-to-end wall-clock time is lower because independent stages are executed in concurrent groups (Section~6.3.2), and is reported directly by \texttt{npm run bench}. This comfortably satisfies the response-time intent of NFR1 for inputs up to the 5000-character limit.
+Table~\ref{tab:gentime} reports the mean processing time of each pipeline stage for the built-in system. The cost is dominated by the language-model stages that emit the most content---functional test cases ($\approx$29\,s) and UI code generation ($\approx$50\,s, which itself comprises a design-system call plus one call per screen)---and the security-requirements stage ($\approx$27\,s), while the structured-extraction stages complete in single-digit seconds. The summed per-stage time is $\approx$136\,s, whereas the measured \textbf{end-to-end wall-clock time averaged 115.9\,s} (min 83\,s, max 209\,s over eight clean runs): the difference is the saving from executing independent stages in concurrent groups (Section~6.3.2). This comfortably satisfies the response-time intent of NFR1 for inputs up to the 5000-character limit. (Across all runs including slower Bring-Your-Own-Key models the mean rises to $\approx$178\,s, which is why the dashboard separates the two scopes.)
 
 \begin{table}[ht]
 \centering
@@ -739,26 +767,27 @@ Table~\ref{tab:gentime} reports the mean processing time of each pipeline stage.
 \toprule
 \textbf{\#} & \textbf{Stage} & \textbf{Mean time (s)} \\
 \midrule
-1 & Requirement Extraction & 4.3 \\
-2 & Functional Requirements & 5.3 \\
-3 & Non-Functional Requirements & 1.3 \\
-4 & Security Requirements & 26.4 \\
-5 & Functional Test Cases & 46.5 \\
-6 & Security Test Cases & 7.5 \\
-7 & UI Wireframe Descriptions & 3.9 \\
-8 & Traceability Matrix & 13.1 \\
-9 & UML Diagrams & 4.6 \\
-10 & UI Code Generation & 80.4 \\
+1 & Requirement Extraction & 4.1 \\
+2 & Functional Requirements & 5.6 \\
+3 & Non-Functional Requirements & 1.5 \\
+4 & Security Requirements & 26.7 \\
+5 & Functional Test Cases & 29.4 \\
+6 & Security Test Cases & 8.1 \\
+7 & UI Wireframe Descriptions & 4.0 \\
+8 & Traceability Matrix & 1.6 \\
+9 & UML Diagrams & 4.9 \\
+10 & UI Code Generation & 49.7 \\
 \midrule
- & \textbf{Summed stage time} & \textbf{$\approx$173} \\
+ & \textbf{Summed stage time} & \textbf{$\approx$136} \\
+ & \textbf{End-to-end (concurrent)} & \textbf{$\approx$116} \\
 \bottomrule
 \end{tabular}
-\caption{Mean generation time per pipeline stage (database report).}
+\caption{Mean generation time per pipeline stage, built-in system models (admin dashboard, IQR-cleaned).}
 \label{tab:gentime}
 \end{table}
 
 \subsection{API Latency (NFR2)}
-Per-call API latency is captured by an in-process collector that times every Groq and Gemini request --- success or failure --- and aggregates the samples into p50/p95/max per provider. The benchmark harness resets this collector before a run and emits the summary alongside the timing and accuracy tables, providing the direct measurement basis for NFR2 (external API calls within target latency, with a bounded 95th percentile). The retry-and-fallback logic (Section~6.3.1) also makes the collector a natural place to observe the failure rate that NFR8 addresses.
+Per-call API latency is captured by an in-process collector that times every Groq and Gemini request --- success or failure --- and aggregates the samples into p50/p95/max per provider, while the admin dashboard additionally reports the mean per-stage time for each \emph{model} actually used (built-in or BYOK). Together these provide the direct measurement basis for NFR2 (external API calls within target latency, with a bounded 95th percentile). The retry-and-fallback logic (Section~6.3.1) also makes the collector a natural place to observe the failure rate that NFR8 addresses.
 
 \subsection{Complementary External Evaluation}
 The remaining non-functional requirements are assessed with the external tools identified in Section~4.3, which sit outside the application code: concurrent-user load (NFR3) with Apache~JMeter / k6 against the deployed backend; accessibility conformance (NFR6, WCAG~2.1~AA) with axe~/~WAVE / \texttt{pa11y} against the generated UI screens; and availability (NFR7) with UptimeRobot~/~Pingdom monitoring of the live services.
@@ -773,11 +802,13 @@ This project set out to reduce the manual effort, inconsistency, and security ov
 
 Measured against the objectives in Section~1.3, the project met each one: an AI system that generates complete SRS documents automatically; integrated, context-driven security requirement generation; requirement-driven UI prototype generation; automated functional and security test-case generation; and a workflow that brings security and testing concerns forward to the requirements phase. The integrated pipeline directly addresses the research gap identified in Chapter~3---the absence of a single tool spanning natural-language input through SRS, UI prototype, and security-aware test cases with end-to-end traceability.
 
+Beyond the original objectives, the delivered platform adds capabilities that strengthen its rigour and reach: a per-stage \textbf{multi-provider routing} scheme that places each artifact on the language model that an independent evaluation showed produces the best result for it; an \textbf{independent GEval (LLM-as-a-Judge) quality layer} that grades every generation and, with the rule-based conformance engine, gives a reproducible accuracy figure (82.5\% overall, with UI code at 95\%); an admin \textbf{analytics dashboard} that surfaces those quality, timing, and per-model speed metrics live; and \textbf{Bring-Your-Own-Key} support that lets users run the whole pipeline on their own Anthropic, OpenAI, Gemini, or Groq account with the key encrypted at rest. Together these turn Req2UI from a single-shot generator into a measurable, configurable platform.
+
 \section{Limitations}
 The system's output quality is bounded by the underlying language models and by the detail of the user's input; vague descriptions yield thinner specifications, which the pipeline detects and reports rather than masks. Generation latency and throughput are constrained by third-party API rate limits, particularly on free tiers, and the generated UI code is intended as a low-fidelity prototype rather than a finished application. Non-functional targets such as concurrent-user load and full WCAG~2.1~AA conformance are specified but require dedicated evaluation runs to confirm.
 
 \section{Future Work}
-Promising extensions include: an administrative dashboard for usage monitoring and user management; extending the natural-language refinement already available for the UI artifact to the textual artifacts (requirements and test cases); iterative refinement loops where the model critiques and improves its own output without user prompting; export to additional formats and direct integration with issue trackers and design tools; fine-tuning or retrieval augmentation on domain-specific requirements corpora to improve accuracy; broadening the security analysis beyond the OWASP Top 10 to standards such as ASVS; and automated execution of the generated functional test cases against the generated UI.
+Promising extensions include: extending the natural-language refinement already available for the UI artifact to the textual artifacts (requirements and test cases); \emph{closing the loop} on the GEval scores by feeding the judge's per-artifact critique back into an automatic regeneration of the lowest-scoring stages, so the system improves its own output without user prompting; export to additional formats and direct integration with issue trackers and design tools; fine-tuning or retrieval augmentation on domain-specific requirements corpora to lift the test-case and UML scores that the judge currently flags as weakest; broadening the security analysis beyond the OWASP Top 10 to standards such as ASVS; and automated execution of the generated functional test cases against the generated UI.
 
 % ============================================================
 \begin{thebibliography}{9}

@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import CreateProject from "./pages/CreateProject";
 import ProjectDetail from "./pages/ProjectDetail";
 import ArtifactsViewer from "./pages/ArtifactsViewer";
+import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
@@ -32,6 +33,7 @@ export default function App() {
               <Route path="/projects/new" element={<CreateProject />} />
               <Route path="/projects/:id" element={<ProjectDetail />} />
               <Route path="/projects/:id/artifacts" element={<ArtifactsViewer />} />
+              <Route path="/settings" element={<Settings />} />
             </Route>
             <Route element={<AdminRoute />}>
               <Route path="/admin" element={<Admin />} />

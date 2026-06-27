@@ -5,6 +5,8 @@ import { requireAuth } from "../middleware/auth.middleware";
 import { runPipeline, regenerateUICode } from "../services/pipeline.service";
 import { refineUI, RefinementScope } from "../services/refinement.service";
 import { ensureEvaluationFresh } from "../services/evaluation.service";
+import { getUserLlmConfig } from "../services/aiSettings.service";
+import { withLlmOverride } from "../services/llm/context";
 
 const router = Router();
 
@@ -62,19 +64,24 @@ router.get("/:id/generate", requireAuth, genLimiter, async (req: Request, res: R
   }
 
   try {
-    await runPipeline(
-      project.id,
-      project.name,
-      project.description,
-      (stageEvent) => send("stage", stageEvent),
-      // A completed project means the user explicitly clicked "Re-generate" —
-      // redo every stage. Any other status (pending/failed/interrupted) resumes,
-      // skipping stages whose artifacts already exist.
-      {
-        force: project.status === "completed",
-        metadata: project.metadata ?? undefined,
-        uiPreferences: project.ui_preferences ?? undefined,
-      }
+    // BYOK: if the user has configured their own AI provider, run the whole
+    // pipeline under their credentials; otherwise the built-in system is used.
+    const llmConfig = await getUserLlmConfig(userId);
+    await withLlmOverride(llmConfig, () =>
+      runPipeline(
+        project.id,
+        project.name,
+        project.description,
+        (stageEvent) => send("stage", stageEvent),
+        // A completed project means the user explicitly clicked "Re-generate" —
+        // redo every stage. Any other status (pending/failed/interrupted) resumes,
+        // skipping stages whose artifacts already exist.
+        {
+          force: project.status === "completed",
+          metadata: project.metadata ?? undefined,
+          uiPreferences: project.ui_preferences ?? undefined,
+        }
+      )
     );
 
     send("done", { message: "Pipeline complete" });
@@ -104,7 +111,10 @@ router.get("/:id/generate/ui-code", requireAuth, genLimiter, async (req: Request
   };
 
   try {
-    await regenerateUICode(req.params.id as string, req.user!.sub, (ev) => send("stage", ev));
+    const llmConfig = await getUserLlmConfig(req.user!.sub);
+    await withLlmOverride(llmConfig, () =>
+      regenerateUICode(req.params.id as string, req.user!.sub, (ev) => send("stage", ev))
+    );
     send("done", { message: "UI code generation complete" });
   } catch (err: any) {
     send("error", { error: err?.message ?? "Generation failed" });
@@ -132,11 +142,14 @@ router.get("/:id/refine", requireAuth, genLimiter, async (req: Request, res: Res
   const screenIds = screensParam ? screensParam.split(",").filter(Boolean) : [];
 
   try {
-    const result = await refineUI(
-      req.params.id as string,
-      req.user!.sub,
-      { prompt, scope, screenIds },
-      (ev) => send("stage", ev)
+    const llmConfig = await getUserLlmConfig(req.user!.sub);
+    const result = await withLlmOverride(llmConfig, () =>
+      refineUI(
+        req.params.id as string,
+        req.user!.sub,
+        { prompt, scope, screenIds },
+        (ev) => send("stage", ev)
+      )
     );
     send("result", result);
     send("done", { message: "Refinement ready to preview" });

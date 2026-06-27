@@ -13,15 +13,17 @@ Paste a project description and Req2UI streams through 10 pipeline stages, gener
 | # | Artifact | Standard | LLM |
 |---|----------|----------|-----|
 | 1 | Requirement extraction + SRS narrative | — | Groq |
-| 2 | Functional requirements | IEEE 830 | Groq |
+| 2 | Functional requirements | IEEE 830 | **Gemini** |
 | 3 | Non-functional requirements | IEEE 830 | Groq |
 | 4 | Security requirements | OWASP Top 10 (2021) | Groq |
-| 5 | Functional test cases | IEEE 829 | Groq |
-| 6 | Security test cases | — | Groq |
+| 5 | Functional test cases | IEEE 829 | **Gemini** |
+| 6 | Security test cases | — | **Gemini** |
 | 7 | UI wireframe descriptions | — | Groq |
 | 8 | Traceability matrix | — | Groq |
-| 9 | UML diagrams (Use Case, Class, Sequence) | UML 2.x / Mermaid.js | Groq |
+| 9 | UML diagrams (6–8 across use case, class, ER, sequence, activity, state, component) | UML 2.x / Mermaid.js | **Gemini** |
 | 10 | UI code (HTML + Tailwind, per screen) | — | Gemini |
+
+**Per-stage provider routing.** The pipeline runs on **two providers, routed per stage**: the capability-critical text stages (functional requirements, functional/security test cases, UML) plus UI code go to **Gemini** — which an independent quality evaluation showed produces the strongest results on those artifacts — while the cheaper, derivative stages stay on **Groq**. Each Gemini-routed stage falls back to its Groq model on an outage, so a provider hiccup costs quality on one stage rather than failing the run. Stage/provider mapping lives in `STAGE_PROVIDER`/`STAGE_MODEL` in `pipeline.service.ts`.
 
 Artifacts are viewable in an IEEE 830-structured SRS document tab and individually, with export to **PDF**, **DOCX**, **CSV**, and **LaTeX**.
 
@@ -38,6 +40,14 @@ Stage 10 is a two-pass Gemini process designed for coherent, realistic prototype
 - **Robustness & graceful fallback** — generated HTML is validated for completeness and regenerated once at a larger token budget if truncated. To survive Gemini capacity spikes (`503 / model overloaded`), calls escalate through a fallback chain — retry the same model, rotate to sibling Gemini models, then fall back to Groq — and the design system degrades to a built-in default if all else fails. Per-screen generation is fault-isolated (`Promise.allSettled`): a single failed page is skipped and the run is saved as **partial** rather than discarding the screens already produced.
 - **Post-generation refinement** — refine the result with natural-language instructions scoped to a page, several pages, or the whole design system; changes are previewed as a pending revision before being applied, discarded, or rolled back via revision history.
 
+### Quality evaluation (GEval) + admin dashboard
+
+After each generation, an independent **GEval (LLM-as-a-Judge)** layer grades the output — SRS, UI code, UML, and test cases each judged on weighted 1–5 criteria, aggregated into a per-artifact percentage, an overall accuracy, and a letter grade. It runs on the system's own key (never a user's), never blocks generation (a missing artifact or judge failure degrades gracefully), and is shown as a **Quality** tab plus streamed as a final SSE event. An admin-only **analytics dashboard** surfaces these live: mean accuracy with per-artifact and grade breakdowns, per-stage and per-model timing (IQR-cleaned, built-in vs. BYOK separated), and a recent-projects table. On the projects evaluated so far the mean accuracy is **82.5%** (UI code highest at 95%), end-to-end generation averaging **~116 s** on the built-in models.
+
+### Bring-Your-Own-Key (multi-provider)
+
+Users can connect **their own AI provider** in Settings — **Anthropic (Claude), OpenAI (ChatGPT), Google Gemini, or Groq** — with a model name and API key (verified by a "Test connection" check). When enabled, that provider serves *every* stage of their generations. Keys are **encrypted at rest with AES-256-GCM**, never returned to the client (only a masked preview) and never logged; the override is propagated through the pipeline via `AsyncLocalStorage` so no credentials are threaded through the code. A single dispatcher normalises provider quirks (token-limit parameter names, JSON modes, temperature restrictions, Gemini thinking budget).
+
 ---
 
 ## Tech Stack
@@ -48,8 +58,9 @@ Stage 10 is a two-pass Gemini process designed for coherent, realistic prototype
 | Backend | Node.js 22, Express, TypeScript |
 | Database | PostgreSQL (Neon serverless) |
 | Auth | JWT (15 min access) + Refresh tokens + httpOnly cookies |
-| AI | Groq API — llama-3.3-70b-versatile (requirements/analysis) · Gemini 2.5 Flash-Lite (UI code generation) |
-| Export | pdfkit, docx.js, Mermaid.js → PNG (resvg-js) |
+| AI | Groq (llama-3.3-70b-versatile / llama-3.1-8b-instant) + Google Gemini (gemini-3.1-flash-lite), routed per stage · optional user BYOK (Anthropic / OpenAI / Gemini / Groq) |
+| Quality | GEval LLM-as-a-Judge (Gemini, Groq fallback) + rule-based conformance metrics |
+| Export | Tectonic (LaTeX → PDF), docx.js, csv-writer, JSZip (Overleaf bundle), Mermaid.js → PNG (resvg-js) |
 | UML rendering | Mermaid.js (browser) + resvg-js (PDF export) |
 | Deployment | Vercel (frontend) · Render (backend) |
 
@@ -62,7 +73,7 @@ Stage 10 is a two-pass Gemini process designed for coherent, realistic prototype
 - Node.js 20+
 - A [Neon](https://neon.tech) PostgreSQL database (free tier works)
 - A [Groq](https://console.groq.com) API key (free)
-- A [Gemini](https://aistudio.google.com/apikey) API key (free) — used for UI code generation
+- A [Gemini](https://aistudio.google.com/apikey) API key (free) — used for UI code, the routed text stages, and the quality judge
 
 ### 1. Clone
 
@@ -102,12 +113,16 @@ REQ2UI/
 │   │   ├── config/         # env validation (zod)
 │   │   ├── db/             # Neon client + migrations
 │   │   ├── middleware/      # JWT auth guard
-│   │   ├── routes/         # auth · projects · generate · export · artifacts
+│   │   ├── routes/         # auth · projects · generate · export · artifacts · evaluation · settings · admin
 │   │   └── services/
 │   │       ├── groq.service.ts      # Groq SDK wrapper (analysis stages)
-│   │       ├── gemini.service.ts    # Gemini SDK wrapper (UI code gen)
-│   │       ├── pipeline.service.ts  # 10-stage orchestrator + SSE
-│   │       └── export.service.ts    # PDF · DOCX · LaTeX · CSV
+│   │       ├── gemini.service.ts    # Gemini SDK wrapper (UI + routed stages)
+│   │       ├── pipeline.service.ts  # 10-stage orchestrator + per-stage routing + SSE
+│   │       ├── evaluation.service.ts # GEval LLM-as-a-Judge quality grading
+│   │       ├── admin.service.ts     # platform analytics aggregation
+│   │       ├── aiSettings.service.ts # BYOK persistence (encrypted key)
+│   │       ├── llm/                 # BYOK dispatcher · AES-256-GCM crypto · async-context override
+│   │       └── export.service.ts    # PDF (Tectonic) · DOCX · LaTeX · CSV
 │   └── package.json
 ├── frontend/
 │   ├── src/
@@ -115,9 +130,11 @@ REQ2UI/
 │   │   ├── components/     # Icons, ThemeToggle, ProtectedRoute, Toast
 │   │   ├── context/        # AuthContext · ToastContext · ThemeContext
 │   │   ├── pages/
-│   │   │   ├── ArtifactsViewer.tsx  # tabbed SRS viewer + IEEE 830 doc view
+│   │   │   ├── ArtifactsViewer.tsx  # tabbed SRS viewer + IEEE 830 doc view + Quality tab
 │   │   │   ├── ProjectDetail.tsx     # SSE pipeline progress
 │   │   │   ├── Dashboard.tsx
+│   │   │   ├── Settings.tsx          # Bring-Your-Own-Key provider config
+│   │   │   ├── Admin.tsx             # admin analytics dashboard
 │   │   │   └── ...
 │   │   └── types/
 │   └── vercel.json
@@ -171,6 +188,15 @@ Academic deliverables live alongside the code:
 | GET | `/api/projects/:id/export/docx` | Export DOCX |
 | GET | `/api/projects/:id/export/csv` | Export CSV |
 | GET | `/api/projects/:id/export/latex` | Export LaTeX (.tex) |
+| POST | `/api/projects/:id/export/latex-zip` | Export Overleaf-ready LaTeX bundle (.zip) |
+| POST | `/api/projects/:id/evaluate` | Run a GEval quality evaluation |
+| GET | `/api/projects/:id/evaluation` | Latest evaluation report |
+| GET | `/api/projects/:id/evaluations` | Evaluation history |
+| GET | `/api/settings/ai` | Current BYOK settings (masked key) |
+| PUT | `/api/settings/ai` | Save/update BYOK provider, model, key |
+| DELETE | `/api/settings/ai` | Remove BYOK (revert to built-in) |
+| POST | `/api/settings/ai/test` | Test a provider/model/key connection |
+| GET | `/api/admin/stats` | Admin-only analytics (accuracy, timing, model speed) |
 
 ---
 
@@ -182,6 +208,8 @@ Academic deliverables live alongside the code:
 | Frontend | Vercel | `frontend/vercel.json` · root dir: `frontend/` |
 
 **Required env vars on Render:** `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `FRONTEND_URL`, `NODE_ENV=production`
+
+**Optional env vars:** `ENCRYPTION_KEY` (dedicated secret for encrypting stored BYOK keys; falls back to `JWT_SECRET`), `ADMIN_EMAILS` (comma-separated allowlist for the admin dashboard), `GEMINI_MODEL` / `GEMINI_JUDGE_MODEL` (override the generation/judge models), `TECTONIC_PATH` (override the LaTeX→PDF binary location)
 
 **Required env vars on Vercel:** `VITE_API_BASE_URL=https://req2ui-backend.onrender.com`
 

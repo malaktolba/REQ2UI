@@ -390,7 +390,13 @@ export default function ProjectDetail() {
 
           <div className="flex gap-3 flex-wrap">
             <Button onClick={handleGenerate} disabled={generating || project.status === "generating"}>
-              {generating ? "Generating…" : project.status === "completed" ? "Re-generate" : "Generate artifacts"}
+              {generating
+                ? "Generating…"
+                : project.status === "completed"
+                ? "Re-generate"
+                : project.status === "failed"
+                ? "Resume generation"
+                : "Generate artifacts"}
             </Button>
 
             {(() => {

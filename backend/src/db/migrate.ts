@@ -125,6 +125,22 @@ async function migrate() {
       ON evaluations (project_id, created_at DESC)
   `;
 
+  // Bring-Your-Own-Key AI provider settings (one row per user). The API key is
+  // stored ENCRYPTED (AES-256-GCM) — never plaintext. When `enabled`, the user's
+  // provider/model serves every LLM call in their generations; otherwise the
+  // built-in system is used. Dropping the row reverts fully to the built-in.
+  await sql`
+    CREATE TABLE IF NOT EXISTS user_ai_settings (
+      user_id     UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      provider    TEXT NOT NULL,
+      model       TEXT NOT NULL,
+      api_key_enc TEXT NOT NULL,
+      enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
   await sql`
     CREATE TABLE IF NOT EXISTS pipeline_stages (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -138,6 +154,14 @@ async function migrate() {
       UNIQUE(project_id, stage)
     )
   `;
+
+  // Which AI model served each stage, for model-speed analytics. `is_byok` marks
+  // stages served by a user's own provider (Bring-Your-Own-Key) so they can be
+  // separated from the built-in system's models. Idempotent for existing DBs;
+  // pre-existing rows stay NULL (treated as built-in / unknown in the dashboard).
+  await sql`ALTER TABLE pipeline_stages ADD COLUMN IF NOT EXISTS provider TEXT`;
+  await sql`ALTER TABLE pipeline_stages ADD COLUMN IF NOT EXISTS model TEXT`;
+  await sql`ALTER TABLE pipeline_stages ADD COLUMN IF NOT EXISTS is_byok BOOLEAN NOT NULL DEFAULT FALSE`;
 
   console.log("Migrations complete.");
   process.exit(0);

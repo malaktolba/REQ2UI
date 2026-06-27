@@ -1,5 +1,15 @@
 /** Types for the admin analytics dashboard (mirrors backend AdminStats). */
 
+export interface TimingScope {
+  avgSeconds: number | null;
+  minSeconds: number | null;
+  maxSeconds: number | null;
+  timedProjects: number;
+  outliersExcluded: number;
+  outlierThresholdSeconds: number | null;
+  perStage: { stage: number; name: string; avgSeconds: number; runs: number }[];
+}
+
 export interface AdminStats {
   generatedAt: string;
   totals: {
@@ -19,16 +29,19 @@ export interface AdminStats {
     maxScore: number | null;
     evaluatedProjects: number;
     gradeDistribution: { grade: string; count: number }[];
+    perArtifact: { key: string; label: string; avgPercentage: number; projects: number }[];
   };
   timing: {
-    avgSeconds: number | null;
-    minSeconds: number | null;
-    maxSeconds: number | null;
-    timedProjects: number;
-    outliersExcluded: number;
-    outlierThresholdSeconds: number | null;
-    perStage: { stage: number; name: string; avgSeconds: number; runs: number }[];
+    all: TimingScope;
+    builtin: TimingScope;
   };
+  modelUsage: {
+    provider: string;
+    model: string;
+    isByok: boolean;
+    runs: number;
+    avgSeconds: number;
+  }[];
   topUsers: {
     id: string;
     name: string;
@@ -47,5 +60,6 @@ export interface AdminStats {
     durationSeconds: number | null;
     gevalScore: number | null;
     artifactCount: number;
+    engine: string;
   }[];
 }

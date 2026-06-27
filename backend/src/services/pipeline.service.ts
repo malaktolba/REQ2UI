@@ -1,7 +1,8 @@
 import { sql } from "../db/client";
 import { callGroq, callGroqText, GROQ_HEAVY, GROQ_LIGHT } from "./groq.service";
-import { callGeminiJSON, callGeminiText } from "./gemini.service";
+import { callGeminiJSON, callGeminiText, GEMINI_GEN_MODEL } from "./gemini.service";
 import { UIPreferences, uiPreferencesPromptBlock } from "../config/uiPreferences";
+import { getLlmOverride } from "./llm/context";
 
 export interface StageEvent {
   stage: number;
@@ -141,19 +142,44 @@ async function callStageLLM(
   return await callGroq(system, user, cap, groqModel);
 }
 
+/**
+ * The AI model that serves a stage, for per-stage speed analytics. When a user
+ * has configured BYOK, every stage runs on their provider/model (`isByok`);
+ * otherwise it's the built-in routing — Gemini's lead generation model for
+ * Gemini-routed stages, the stage's Groq model otherwise. The runtime may fall
+ * back across a chain on outages, so this records the *primary* model, which is
+ * the common case.
+ */
+function stageModelInfo(stageNum: number): { provider: string; model: string; isByok: boolean } {
+  const override = getLlmOverride();
+  if (override) return { provider: override.provider, model: override.model, isByok: true };
+  // Stage 10 (UI code) isn't in STAGE_PROVIDER — it leads with Gemini.
+  if (stageNum === 10) return { provider: "gemini", model: GEMINI_GEN_MODEL, isByok: false };
+  const provider = STAGE_PROVIDER[stageNum - 1] ?? "groq";
+  if (provider === "gemini") return { provider, model: GEMINI_GEN_MODEL, isByok: false };
+  return { provider, model: STAGE_MODEL[stageNum - 1] ?? GROQ_HEAVY, isByok: false };
+}
+
 async function upsertStage(
   projectId: string,
   stage: number,
   status: string,
-  error?: string
+  error?: string,
+  // The serving model, recorded on running/completed/failed. Omitted on cache
+  // hits (no LLM call this run) so the prior run's attribution is preserved.
+  modelInfo?: { provider: string; model: string; isByok: boolean }
 ) {
   const name = STAGE_NAMES[stage - 1];
   const startedAt = status === "running" ? new Date() : null;
   const finishedAt = status === "completed" || status === "failed" ? new Date() : null;
+  const provider = modelInfo?.provider ?? null;
+  const model = modelInfo?.model ?? null;
+  // null when unknown so COALESCE keeps any existing value on a cache-hit upsert.
+  const isByok = modelInfo ? modelInfo.isByok : null;
 
   await sql`
-    INSERT INTO pipeline_stages (project_id, stage, name, status, error, started_at, finished_at)
-    VALUES (${projectId}, ${stage}, ${name}, ${status}, ${error ?? null}, ${startedAt}, ${finishedAt})
+    INSERT INTO pipeline_stages (project_id, stage, name, status, error, started_at, finished_at, provider, model, is_byok)
+    VALUES (${projectId}, ${stage}, ${name}, ${status}, ${error ?? null}, ${startedAt}, ${finishedAt}, ${provider}, ${model}, ${isByok ?? false})
     ON CONFLICT (project_id, stage) DO UPDATE SET
       status = EXCLUDED.status,
       error = EXCLUDED.error,
@@ -162,7 +188,12 @@ async function upsertStage(
       -- the run's real start. Preferring EXCLUDED-when-present does both, so a
       -- re-generation times itself rather than spanning from the first-ever run.
       started_at = COALESCE(EXCLUDED.started_at, pipeline_stages.started_at),
-      finished_at = EXCLUDED.finished_at
+      finished_at = EXCLUDED.finished_at,
+      -- Model attribution: keep the prior value when this upsert doesn't carry
+      -- one (cache hit), otherwise record the model that served this run.
+      provider = COALESCE(${provider}, pipeline_stages.provider),
+      model    = COALESCE(${model}, pipeline_stages.model),
+      is_byok  = COALESCE(${isByok}, pipeline_stages.is_byok)
   `;
 }
 
@@ -191,19 +222,20 @@ async function runStage<T>(
   const cap = maxTokens ?? STAGE_MAX_TOKENS[stageNum - 1] ?? 8000;
   const model = STAGE_MODEL[stageNum - 1] ?? GROQ_HEAVY;
   const provider = STAGE_PROVIDER[stageNum - 1] ?? "groq";
+  const modelInfo = stageModelInfo(stageNum);
   emit({ stage: stageNum, name, status: "running" });
-  await upsertStage(projectId, stageNum, "running");
+  await upsertStage(projectId, stageNum, "running", undefined, modelInfo);
 
   try {
     const raw = await callStageLLM(provider, stageNum, system, user, cap, model);
     const result = transform ? transform(raw) : raw;
     await upsertArtifact(projectId, artifactType, result);
-    await upsertStage(projectId, stageNum, "completed");
+    await upsertStage(projectId, stageNum, "completed", undefined, modelInfo);
     emit({ stage: stageNum, name, status: "completed" });
     return result as T;
   } catch (err: any) {
     const msg = err?.message ?? "Unknown error";
-    await upsertStage(projectId, stageNum, "failed", msg);
+    await upsertStage(projectId, stageNum, "failed", msg, modelInfo);
     emit({ stage: stageNum, name, status: "failed", error: msg });
     throw err;
   }
@@ -341,25 +373,25 @@ export function buildAccentScale(baseHex: string): Record<string, string> {
 }
 
 /**
- * The brand accent is always emitted as Tailwind's `indigo-*` utilities so the
- * preview's instant-recolor (which remaps `indigo`) keeps working. We *redefine*
- * the indigo scale to the generation's chosen accent via the Play-CDN config, so
- * `indigo-600` literally renders as that colour. Code owns this script (not the
- * LLM) for deterministic, always-valid output. Pass the resolved accent hex
- * (see pickDesignDirection); an unparseable hex falls back to the indigo default.
+ * Defines the generation's brand accent as a real, semantically-named Tailwind
+ * colour — the `brand-*` scale. Screens use `brand-600` etc. for accents, and this
+ * Play-CDN config makes `brand-600` render as the chosen accent_hex — honestly,
+ * without hijacking a built-in colour name (`indigo`) and meaning something else.
+ * Code owns this script (not the LLM) for deterministic, always-valid output. Pass
+ * the resolved accent hex; an unparseable/absent hex falls back to a default scale.
  */
 export function accentConfigScript(accentHex?: string): string {
   const scale = accentHex ? buildAccentScale(accentHex) : DEFAULT_INDIGO;
-  return `<script>tailwind.config={theme:{extend:{colors:{indigo:${JSON.stringify(scale)}}}}}</script>`;
+  return `<script>tailwind.config={theme:{extend:{colors:{brand:${JSON.stringify(scale)}}}}}</script>`;
 }
 
 // ── Accent resolution ───────────────────────────────────────────────────────
 // The MODEL chooses the brand accent (it knows the product domain, so it can pick
-// a fitting, distinctive colour rather than the same indigo every time). Code's
-// only job is to turn that choice into the `indigo-*` scale remap so the preview's
-// instant-recolor and the custom-colour feature keep working. Resolution order:
-// an explicit user custom colour wins; otherwise the model's hex (if valid);
-// otherwise the indigo default as a last resort.
+// a fitting, distinctive colour rather than the same default every time). Code's
+// only job is to turn that choice into the `brand-*` scale the generated screens
+// use (and honour an explicit user custom colour). Resolution order: an explicit
+// user custom colour wins; otherwise the model's hex (if valid); otherwise the
+// default accent as a last resort.
 const INDIGO_FALLBACK = "#6366f1";
 
 export function resolveAccentHex(prefs?: UIPreferences, modelHex?: string): string {
@@ -391,7 +423,7 @@ export function htmlLooksComplete(html: string): boolean {
  */
 export const DEFAULT_DESIGN_SYSTEM = {
   navbar:
-    '<nav class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur border-b border-slate-800 px-6 h-14 flex items-center justify-between"><span class="font-bold text-white">App</span><div class="w-8 h-8 rounded-full bg-indigo-600"></div></nav>',
+    '<nav class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur border-b border-slate-800 px-6 h-14 flex items-center justify-between"><span class="font-bold text-white">App</span><div class="w-8 h-8 rounded-full bg-brand-600"></div></nav>',
   footer:
     '<footer class="border-t border-slate-800 py-6 text-center text-slate-500 text-sm">© 2026</footer>',
   body_classes: "bg-slate-950 text-slate-100 min-h-screen flex flex-col",
@@ -468,11 +500,15 @@ async function generateUICodeMultipass(
   // in which case the prompts keep their existing default-design behaviour.
   const prefsBlock = uiPreferencesPromptBlock(uiPreferences);
 
-  const screens = selectDistinctScreens(s7.screens ?? [], 6);
+  // Stage 7 now orders screens most-important-first, so this keeps the priority
+  // screens (incl. a user-named hero) and one extra slot reduces the chance an
+  // important distinct screen is dropped at the cap.
+  const screens = selectDistinctScreens(s7.screens ?? [], 7);
   const total = screens.length;
 
+  const modelInfo = stageModelInfo(10);
   emit({ stage: 10, name: stageName, status: "running", detail: "Designing the UI system…", progress: { current: 0, total } });
-  await upsertStage(projectId, 10, "running");
+  await upsertStage(projectId, 10, "running", undefined, modelInfo);
 
   try {
     const routeMap = screens
@@ -483,7 +519,7 @@ async function generateUICodeMultipass(
     //    THIS product (theme, neutral family, brand accent, shape/depth) plus the
     //    navbar, footer, reusable component kit, and shared sample data. We don't
     //    prescribe colours — the model picks them; code only turns the chosen
-    //    accent into the `indigo` remap afterward. Uses Gemini → Groq → hardcoded
+    //    accent into the `brand-*` scale afterward. Uses Gemini → Groq → hardcoded
     //    default fallback so traffic spikes on Gemini never abort the stage. ────
     const designSystem = await designSystemWithFallback(
       `You are a senior product designer. Invent a cohesive, DISTINCTIVE visual identity for THIS specific web app, then express it as an HTML design system + reusable component class kit.
@@ -517,7 +553,7 @@ Return a JSON object with exactly this shape:
 }
 
 ACCENT COLOUR — IMPORTANT:
-- In all the HTML you output, express the brand accent ONLY with Tailwind \`indigo-*\` utilities (indigo-600 primary, indigo-500/400 for hovers/highlights). At runtime these are remapped to your chosen accent_hex, so the page renders in YOUR colour. Do NOT use any other Tailwind colour name (violet/blue/emerald/etc.) for the accent — only \`indigo-*\`.
+- In all the HTML you output, express the brand accent ONLY with Tailwind \`brand-*\` utilities (brand-600 primary, brand-500/400 for hovers/highlights). The page's Tailwind config defines \`brand\` as your chosen accent_hex, so brand-600 renders in YOUR colour. Do NOT use a built-in Tailwind colour name (indigo/violet/blue/emerald/etc.) for the accent — only \`brand-*\`.
 - Use your chosen neutral family for all backgrounds, surfaces, text, and borders.
 
 Rules:
@@ -533,8 +569,8 @@ Rules:
       total
     );
 
-    // The model picked the accent; code turns it into the deterministic `indigo`
-    // remap (custom-colour preference still overrides). A short, model-written
+    // The model picked the accent; code turns it into the deterministic `brand-*`
+    // scale (custom-colour preference still overrides). A short, model-written
     // theme summary keeps every per-screen page on the same aesthetic. The
     // resolved hex is also persisted on the artifact so the wireframe view can
     // tint its mockups to match the generated UI's brand colour.
@@ -610,7 +646,7 @@ CODING RULES:
 2. <head> must include, in this order: <script src="https://cdn.tailwindcss.com"></script>, then this EXACT accent config script: ${accentScript}, then <script src="https://unpkg.com/lucide@latest"></script>, then any <style> blocks
 3. <body> must start with the navbar HTML, end with the footer HTML, main content between them
 4. Reuse the component classes above for buttons, inputs, cards, badges, and tables so the app stays consistent — but DO craft a distinctive, content-rich layout for this specific screen (a strong header/hero where it fits, well-grouped sections, real visual hierarchy and depth). Don't just stack identical generic cards.
-5. Express any accent/brand colour with Tailwind \`indigo-*\` utilities only (remapped to the real brand colour at runtime); use the neutral scale from the body classes for backgrounds/text/borders.
+5. Express any accent/brand colour with Tailwind \`brand-*\` utilities only (the page's Tailwind config defines \`brand\` as the real accent colour); use the neutral scale from the body classes for backgrounds/text/borders.
 6. Icons: use Lucide via <i data-lucide="icon-name"></i>, and call lucide.createIcons() in a <script> just before </body>
 7. Use realistic, domain-appropriate data (names, numbers, dates) — NOT Lorem Ipsum; prefer the shared sample data above
 8. Every UI component listed must be visually present on the page
@@ -700,7 +736,7 @@ System: ${s1.system_summary}`;
     };
 
     await upsertArtifact(projectId, "ui_code", result);
-    await upsertStage(projectId, 10, "completed");
+    await upsertStage(projectId, 10, "completed", undefined, modelInfo);
     emit({
       stage: 10,
       name: stageName,
@@ -709,7 +745,7 @@ System: ${s1.system_summary}`;
     });
   } catch (err: any) {
     const msg = err?.message ?? "Unknown error";
-    await upsertStage(projectId, 10, "failed", msg);
+    await upsertStage(projectId, 10, "failed", msg, modelInfo);
     emit({ stage: 10, name: stageName, status: "failed", error: msg });
     throw err;
   }
@@ -1119,7 +1155,7 @@ Return a JSON object with this exact shape:
     }
   ]
 }
-Cover all major screens implied by the functional requirements. Be detailed about components.`,
+Cover all major screens implied by the functional requirements, and ORDER them by importance with the MOST IMPORTANT screens FIRST (only a limited number of screens are built downstream, so the priority ones must lead). If the user's design direction below names or emphasises specific screens (e.g. a "hero"/primary screen), you MUST include a dedicated screen for each of them. Be detailed about components.${uiPreferencesPromptBlock(opts.uiPreferences)}`,
       `Project: ${projectName}
 System summary: ${s1.system_summary}
 Actors: ${s1.actors?.join(", ")}

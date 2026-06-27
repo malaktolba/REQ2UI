@@ -38,5 +38,5 @@ This needs **Java** on PATH. The `tools/plantuml.jar` is gitignored (21 MB); the
 **auto-downloads it on first run** if missing, then uses the Smetana layout engine (no Graphviz required).
 
 ## Notes
-- Figures reflect the **implemented** system (Groq for stages 1–9, Gemini for stage 10 UI code, Neon PostgreSQL, JWT auth, PDF/DOCX/CSV/LaTeX export), not the older OpenAI/Figma plan in the original draft.
+- Text reflects the **implemented** system: per-stage provider routing (Groq + Gemini, with Gemini on stages 2/5/6/9 and the Stage 10 UI code), optional Bring-Your-Own-Key (Anthropic/OpenAI/Gemini/Groq), a GEval LLM-as-a-Judge quality layer with an admin analytics dashboard, Neon PostgreSQL, JWT auth, and Tectonic-compiled PDF plus DOCX/CSV/LaTeX export — not the older OpenAI/Figma plan in the original draft.
 - Sections marked `% TODO` in `main.tex` (Implementation, Testing, Conclusion, prototype screenshots, parts of Appendix A) are intentionally left as placeholders to fill in.

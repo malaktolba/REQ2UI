@@ -9,6 +9,7 @@ import projectRoutes from "./routes/projects.routes";
 import generateRoutes from "./routes/generate.routes";
 import exportRoutes from "./routes/export.routes";
 import evaluationRoutes from "./routes/evaluation.routes";
+import settingsRoutes from "./routes/settings.routes";
 import adminRoutes from "./routes/admin.routes";
 import { requireAuth } from "./middleware/auth.middleware";
 import { blockAdmin } from "./middleware/admin.middleware";
@@ -39,6 +40,7 @@ app.use("/api/projects", requireAuth, blockAdmin, projectRoutes);
 app.use("/api/projects", requireAuth, blockAdmin, generateRoutes);
 app.use("/api/projects", requireAuth, blockAdmin, exportRoutes);
 app.use("/api/projects", requireAuth, blockAdmin, evaluationRoutes);
+app.use("/api/settings", requireAuth, blockAdmin, settingsRoutes);
 app.use("/api/admin", adminRoutes);
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));

@@ -105,15 +105,16 @@ describe("buildAccentScale", () => {
 });
 
 describe("accentConfigScript", () => {
-  it("emits the standard indigo scale when no accent hex is given", () => {
+  it("emits the default scale when no accent hex is given", () => {
     expect(accentConfigScript(undefined)).toContain("#6366f1");
     expect(accentConfigScript()).toContain("#6366f1");
   });
 
-  it("redefines indigo to the supplied accent colour", () => {
+  it("defines the `brand` colour from the supplied accent (no indigo hijack)", () => {
     const script = accentConfigScript("#14b8a6");
     expect(script).toContain("#14b8a6");
-    expect(script).toContain("indigo");
+    expect(script).toContain("brand");
+    expect(script).not.toContain("indigo");
   });
 });
 

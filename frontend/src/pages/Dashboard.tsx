@@ -146,6 +146,12 @@ export default function Dashboard() {
                 Admin
               </Link>
             )}
+            <Link
+              to="/settings"
+              className="mono-label text-[10px] text-muted hover:text-ink transition mr-1"
+            >
+              Settings
+            </Link>
             <span className="mono-label text-[10px] text-muted hidden sm:block mr-2">{user?.name}</span>
             <ThemeToggle />
             <button

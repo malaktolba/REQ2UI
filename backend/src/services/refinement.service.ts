@@ -161,8 +161,11 @@ current COMPLETE HTML document and a change request. Apply ONLY the requested ch
 
 STRICT RULES:
 1. Output ONLY the complete, updated HTML document — no markdown, no explanation, no code fences.
-2. Preserve EVERYTHING not mentioned by the request: the navbar, footer, all <head> content
-   (Tailwind CDN + config scripts, <style> blocks), existing realistic data, and all unrelated markup.
+2. Preserve EVERYTHING not mentioned by the request: the navbar, footer, unrelated <head> content
+   (Tailwind CDN + <style> blocks), existing realistic data, and all unrelated markup. EXCEPTION:
+   if the request is about colour/branding/theme, DO change the accent — update the \`brand\` colour
+   in the Tailwind config script (theme.extend.colors.brand) and/or the relevant \`brand-*\`/neutral
+   classes — so the new colour actually takes effect.
 3. Keep it mobile-responsive (Tailwind sm:/md:/lg: prefixes) and keep existing hover/focus states
    and JavaScript interactions working.
 4. Do not introduce broken links — keep existing href values.

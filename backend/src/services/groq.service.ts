@@ -1,6 +1,8 @@
 import Groq from "groq-sdk";
 import { env } from "../config/env";
 import { timeLLMCall } from "./llm-metrics";
+import { getLlmOverride } from "./llm/context";
+import { byokJSON, byokText } from "./llm/byok";
 
 const groq = new Groq({ apiKey: env.GROQ_API_KEY });
 
@@ -48,6 +50,11 @@ export async function callGroq(
   model?: string,
   retries = 3
 ): Promise<any> {
+  // BYOK: when the user has configured their own provider, route every call to
+  // it (their key/model), bypassing the built-in Groq routing entirely.
+  const override = getLlmOverride();
+  if (override) return byokJSON(override, systemPrompt, userPrompt, maxTokens);
+
   let lastError: unknown;
   let nudge = ""; // grows to CONCISE_NUDGE once we see a length-truncated reply
   const chain = chainFrom(model);
@@ -104,6 +111,9 @@ export async function callGroqText(
   model?: string,
   retries = 3
 ): Promise<string> {
+  const override = getLlmOverride();
+  if (override) return byokText(override, systemPrompt, userPrompt, maxTokens);
+
   let lastError: unknown;
   const chain = chainFrom(model);
   let modelIndex = 0; // advances through `chain` on rate-limit errors
